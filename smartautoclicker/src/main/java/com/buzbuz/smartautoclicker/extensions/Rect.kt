@@ -1,5 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+/*
  * Copyright (C) 2020 Nain57
  *
  * This program is free software; you can redistribute it and/or
@@ -14,18 +13,15 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
--->
-<resources>
-    <color name="primary">#4CAF50</color>
-    <color name="primaryDark">#388E3C</color>
-    <color name="accent">#448AFF</color>
+ */
+package com.buzbuz.smartautoclicker.extensions
 
-    <color name="textTitle">#FFFFFF</color>
+import android.graphics.Point
+import android.graphics.Rect
 
-    <color name="overlayMenuBackground">#77000000</color>
-    <color name="overlayMenuButtons">#FFFFFF</color>
-    <color name="overlayViewPrimary">#FFFFFF</color>
-    <color name="overlayViewAccentPrimary">@color/primary</color>
-    <color name="overlayViewAccentSecondary">@color/accent</color>
-    <color name="overlayClickSelectorBackground">#77000000</color>
-</resources>
+/**
+ * Get the width and height of this Rect.
+ *
+ * @return the size.
+ */
+fun Rect.size(): Point = Point(width(), height())

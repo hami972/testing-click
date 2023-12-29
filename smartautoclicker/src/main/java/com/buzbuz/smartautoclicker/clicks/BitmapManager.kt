@@ -16,6 +16,7 @@
  */
 package com.buzbuz.smartautoclicker.clicks
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import android.util.LruCache
@@ -36,13 +37,32 @@ import java.nio.ByteBuffer
  */
 class BitmapManager(private val appDataDir: File) {
 
-    private companion object {
+    companion object {
         /** Tag for logs */
         private const val TAG = "BitmapManager"
         /** The prefix appended to all bitmap file names. */
         private const val CLICK_CONDITION_FILE_PREFIX = "Condition_"
         /** The ratio of the total application size for the size of the bitmap cache in the memory. */
         private const val CACHE_SIZE_RATIO = 0.5
+
+        /** Singleton preventing multiple instances of the bitmap manager at the same time. */
+        @Volatile
+        private var INSTANCE: BitmapManager? = null
+
+        /**
+         * Get the repository singleton, or instantiates it if it wasn't yet.
+         *
+         * @param context the Android context.
+         *
+         * @return the bitmap manager singleton.
+         */
+        fun getInstance(context: Context): BitmapManager {
+            return INSTANCE ?: synchronized(this) {
+                val instance = BitmapManager(context.filesDir)
+                INSTANCE = instance
+                instance
+            }
+        }
     }
 
     /** Cache for the bitmaps loaded in memory. */
@@ -94,9 +114,9 @@ class BitmapManager(private val appDataDir: File) {
      * @param width the width of the bitmap.
      * @param height the height of the bitmap.
      *
-     * @return the loaded bitmap.
+     * @return the loaded bitmap, or null if the path is invalid
      */
-    suspend fun loadBitmap(path: String, width: Int, height: Int) : Bitmap {
+    suspend fun loadBitmap(path: String, width: Int, height: Int) : Bitmap? {
         var cachedBitmap = memoryCache.get(path)
         if (cachedBitmap != null) {
             return cachedBitmap
@@ -104,7 +124,8 @@ class BitmapManager(private val appDataDir: File) {
 
         val file = File(appDataDir, path)
         if (!file.exists()) {
-            // TODO Handle this error
+            Log.e(TAG, "Invalid path $path, bitmap file can't be found.")
+            return null
         }
 
         return withContext(context = Dispatchers.IO) {

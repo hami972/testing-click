@@ -16,16 +16,6 @@
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
 -->
 <resources>
-    <color name="primary">#4CAF50</color>
-    <color name="primaryDark">#388E3C</color>
-    <color name="accent">#448AFF</color>
-
-    <color name="textTitle">#FFFFFF</color>
-
-    <color name="overlayMenuBackground">#77000000</color>
-    <color name="overlayMenuButtons">#FFFFFF</color>
-    <color name="overlayViewPrimary">#FFFFFF</color>
-    <color name="overlayViewAccentPrimary">@color/primary</color>
-    <color name="overlayViewAccentSecondary">@color/accent</color>
-    <color name="overlayClickSelectorBackground">#77000000</color>
+    <integer name="duration_hint_fade_ms">750</integer>
+    <integer name="duration_hint_all_fade_delay_ms">1250</integer>
 </resources>

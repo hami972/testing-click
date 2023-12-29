@@ -15,17 +15,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
 -->
-<resources>
-    <color name="primary">#4CAF50</color>
-    <color name="primaryDark">#388E3C</color>
-    <color name="accent">#448AFF</color>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/ItemView"
+    android:orientation="horizontal">
 
-    <color name="textTitle">#FFFFFF</color>
+    <TextView
+        android:id="@+id/text_pre"
+        android:layout_width="@dimen/item_height"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:textSize="@dimen/text_size_list_item_text"
+        android:visibility="gone" />
 
-    <color name="overlayMenuBackground">#77000000</color>
-    <color name="overlayMenuButtons">#FFFFFF</color>
-    <color name="overlayViewPrimary">#FFFFFF</color>
-    <color name="overlayViewAccentPrimary">@color/primary</color>
-    <color name="overlayViewAccentSecondary">@color/accent</color>
-    <color name="overlayClickSelectorBackground">#77000000</color>
-</resources>
+    <TextView
+        android:id="@+id/text_title"
+        style="@style/DialogChoiceItemTitle"/>
+
+</LinearLayout>
