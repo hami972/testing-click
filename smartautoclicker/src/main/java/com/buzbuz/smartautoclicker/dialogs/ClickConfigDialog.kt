@@ -16,28 +16,22 @@
  */
 package com.buzbuz.smartautoclicker.dialogs
 
+import android.annotation.SuppressLint
 import android.content.Context
+import android.view.LayoutInflater
 import android.view.View
 import androidx.appcompat.app.AlertDialog
 
 import com.buzbuz.smartautoclicker.R
 import com.buzbuz.smartautoclicker.extensions.setCustomTitle
 import com.buzbuz.smartautoclicker.extensions.setLeftRightCompoundDrawables
-import com.buzbuz.smartautoclicker.overlays.OverlayDialogController
+import com.buzbuz.smartautoclicker.baseui.overlays.OverlayDialogController
 import com.buzbuz.smartautoclicker.database.ClickCondition
 import com.buzbuz.smartautoclicker.database.ClickInfo
+import com.buzbuz.smartautoclicker.databinding.DialogClickConfigBinding
 import com.buzbuz.smartautoclicker.model.DetectorModel
 import com.buzbuz.smartautoclicker.overlays.ClickSelectorMenu
 import com.buzbuz.smartautoclicker.overlays.ConditionSelectorMenu
-
-import kotlinx.android.synthetic.main.dialog_click_config.edit_delay_after
-import kotlinx.android.synthetic.main.dialog_click_config.edit_name
-import kotlinx.android.synthetic.main.dialog_click_config.layout_condition_operator
-import kotlinx.android.synthetic.main.dialog_click_config.list_conditions
-import kotlinx.android.synthetic.main.dialog_click_config.root_view
-import kotlinx.android.synthetic.main.dialog_click_config.text_click_type
-import kotlinx.android.synthetic.main.dialog_click_config.text_condition_operator
-import kotlinx.android.synthetic.main.dialog_click_config.text_condition_operator_desc
 
 /**
  * [OverlayDialogController] implementation for displaying a click info and allowing the user to edit it.
@@ -58,25 +52,30 @@ class ClickConfigDialog(
     /** Adapter displaying all condition for the click displayed by this dialog. */
     private val conditionsAdapter = ConditionAdapter(::onAddConditionClicked, ::onConditionClicked)
 
+    /** ViewBinding containing the views for this dialog. */
+    private lateinit var viewBinding: DialogClickConfigBinding
+
     override fun onCreateDialog(): AlertDialog.Builder {
+        viewBinding = DialogClickConfigBinding.inflate(LayoutInflater.from(context))
         return AlertDialog.Builder(context)
             .setCustomTitle(R.layout.view_dialog_title, R.string.dialog_click_config_title)
-            .setView(R.layout.dialog_click_config)
+            .setView(viewBinding.root)
             .setPositiveButton(android.R.string.ok, null)
             .setNegativeButton(android.R.string.cancel, null)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onDialogCreated(dialog: AlertDialog) {
         clickInfo.let { click ->
-            dialog.apply {
-                root_view.setOnTouchListener(hideSoftInputTouchListener)
-                edit_name.setText(click.name)
-                edit_name.setSelection(click.name.length)
-                edit_delay_after.setText(click.delayAfterMs.toString())
-                text_click_type.setOnClickListener { onConfigureTypeClicked() }
-                layout_condition_operator.setOnClickListener { onConfigureOperatorClicked() }
+            viewBinding.apply {
+                root.setOnTouchListener(hideSoftInputTouchListener)
+                editName.setText(click.name)
+                editName.setSelection(click.name.length)
+                editDelayAfter.setText(click.delayAfterMs.toString())
+                textClickType.setOnClickListener { onConfigureTypeClicked() }
+                layoutConditionOperator.setOnClickListener { onConfigureOperatorClicked() }
                 conditionsAdapter.conditions = ArrayList(click.conditionList)
-                list_conditions.adapter = conditionsAdapter
+                listConditions.adapter = conditionsAdapter
             }
         }
 
@@ -94,9 +93,7 @@ class ClickConfigDialog(
             R.string.dialog_click_type_title,
             R.string.dialog_click_type_single,
             R.string.dialog_click_type_swipe,
-            null,
             R.drawable.ic_click,
-            null,
             R.drawable.ic_swipe
         ) { choiceClicked ->
 
@@ -125,10 +122,8 @@ class ClickConfigDialog(
             R.string.dialog_condition_operator_title,
             R.string.condition_operator_and_desc,
             R.string.condition_operator_or_desc,
-            R.string.condition_operator_and,
-            null,
-            R.string.condition_operator_or,
-            null
+            R.drawable.ic_all_conditions,
+            R.drawable.ic_one_condition,
         ) { choiceClicked ->
             clickInfo.conditionOperator =
                 if (choiceClicked == DualChoiceDialog.FIRST) ClickInfo.AND else ClickInfo.OR
@@ -170,10 +165,8 @@ class ClickConfigDialog(
      */
     private fun onOkClicked() {
         clickInfo.apply {
-            dialog?.apply {
-                name = edit_name.text.toString()
-                delayAfterMs = edit_delay_after.text.toString().toLong()
-            }
+            name = viewBinding.editName.text.toString()
+            delayAfterMs = viewBinding.editDelayAfter.text.toString().toLong()
             conditionList = conditionsAdapter.getAllConditions()
 
             if (clickInfo.id == 0L) {
@@ -190,7 +183,7 @@ class ClickConfigDialog(
     private fun refreshDialogDisplay() {
         dialog?.apply {
             clickInfo.let { click ->
-                text_click_type.apply {
+                viewBinding.textClickType.apply {
                     when (click.type) {
                         ClickInfo.SINGLE -> {
                             text = context.getString(R.string.dialog_click_config_type_single, click.from?.x,
@@ -211,12 +204,16 @@ class ClickConfigDialog(
 
                 when (click.conditionOperator) {
                     ClickInfo.AND -> {
-                        text_condition_operator.text = context.getString(R.string.condition_operator_and)
-                        text_condition_operator_desc.text = context.getString(R.string.condition_operator_and_desc)
+                        viewBinding.textConditionOperatorDesc.apply {
+                            setLeftRightCompoundDrawables(R.drawable.ic_all_conditions, R.drawable.ic_chevron)
+                            text = context.getString(R.string.condition_operator_and)
+                        }
                     }
                     ClickInfo.OR -> {
-                        text_condition_operator.text = context.getString(R.string.condition_operator_or)
-                        text_condition_operator_desc.text = context.getString(R.string.condition_operator_or_desc)
+                        viewBinding.textConditionOperatorDesc.apply {
+                            setLeftRightCompoundDrawables(R.drawable.ic_one_condition, R.drawable.ic_chevron)
+                            text = context.getString(R.string.condition_operator_or)
+                        }
                     }
                 }
 

@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
  */
-package com.buzbuz.smartautoclicker.gestures
+package com.buzbuz.smartautoclicker.baseui.gestures
 
 import android.graphics.RectF
 import android.view.MotionEvent
@@ -58,8 +58,8 @@ class MoveGesture(view: View, handleSize: Float, private val moveListener: (Floa
 
     override fun onEvent(event: MotionEvent, viewArea: RectF): Boolean {
         moveListener(
-            moveInitialPosition.first + event.getX(firstPointerDownId) - moveInitialEventPosition.first,
-            moveInitialPosition.second + event.getY(firstPointerDownId) - moveInitialEventPosition.second
+            moveInitialPosition.first + event.getX(currentPointerDownIndex) - moveInitialEventPosition.first,
+            moveInitialPosition.second + event.getY(currentPointerDownIndex) - moveInitialEventPosition.second
         )
         return true
     }

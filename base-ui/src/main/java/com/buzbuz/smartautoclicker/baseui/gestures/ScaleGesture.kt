@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
  */
-package com.buzbuz.smartautoclicker.gestures
+package com.buzbuz.smartautoclicker.baseui.gestures
 
 import android.content.Context
 import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+
+import androidx.annotation.VisibleForTesting
 
 /**
  * Gesture wrapping a [ScaleGestureDetector] for scaling the view with a pinch.
@@ -31,7 +33,7 @@ import android.view.View
  * Move listener parameter is the scale factor to apply to the view.
  */
 class ScaleGesture(view: View, handleSize: Float, context: Context, private val onScaleListener: (Float) -> Unit)
-    : Gesture(view, handleSize) {
+    : Gesture(view, handleSize, true) {
 
     /** Called when the scale gesture is detected and propagate the scale factor to the listener. */
     private val scaleListener = object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -41,7 +43,12 @@ class ScaleGesture(view: View, handleSize: Float, context: Context, private val 
         }
     }
     /** The Android scale gesture detector handling the touch events to detect the pinch for scaling. */
-    private val scaleDetector = ScaleGestureDetector(context, scaleListener)
+    private val scaleDetector: ScaleGestureDetector by lazy {
+        scaleDetectorSupplier?.invoke(scaleListener) ?: ScaleGestureDetector(context, scaleListener)
+    }
+    /** Test member allowing to inject a [ScaleGestureDetector]. */
+    @VisibleForTesting
+    internal var scaleDetectorSupplier: ((ScaleGestureDetector.SimpleOnScaleGestureListener) -> ScaleGestureDetector)? = null
 
     override val gestureType = SCALE
     override fun onDownEvent(event: MotionEvent, viewArea: RectF): Boolean = scaleDetector.onTouchEvent(event)

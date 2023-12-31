@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; If not, see <http://www.gnu.org/licenses/>.
  */
-package com.buzbuz.smartautoclicker.overlays
+package com.buzbuz.smartautoclicker.baseui.overlays
 
 import android.content.Context
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -77,6 +78,14 @@ abstract class OverlayDialogController(context: Context) : OverlayController(con
                 onDialogDismissed()
             }
             .setCancelable(false)
+            .setOnKeyListener { _, keyCode, event ->
+                if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                    dismiss()
+                    true
+                } else {
+                    false
+                }
+            }
             .create()
             .also {
                 it.window?.apply {
@@ -124,9 +133,7 @@ abstract class OverlayDialogController(context: Context) : OverlayController(con
     }
 
     final override fun onDismissed() {
-        if (isShowing) {
-            dialog?.dismiss()
-        }
+        dialog?.dismiss()
     }
 
     /** Handle the dialog dismissing. */
@@ -144,7 +151,7 @@ abstract class OverlayDialogController(context: Context) : OverlayController(con
      * @param textId the string resource identifier for the text of the button.
      * @param listener the new click listener of the button. Can be null if none is needed.
      */
-    protected fun changeButtonState(button: Button, visibility: Int, textId: Int = -1, listener: ((View) -> Unit)? = null) {
+    protected fun changeButtonState(button: Button, visibility: Int, textId: Int = -1, listener: View.OnClickListener? = null) {
         button.apply {
             when (visibility) {
                 View.VISIBLE -> {

@@ -16,6 +16,10 @@
  */
 package com.buzbuz.smartautoclicker.database.utils
 
+import android.graphics.Point
+import android.graphics.Rect
+
+import com.buzbuz.smartautoclicker.database.ClickCondition
 import com.buzbuz.smartautoclicker.database.ClickInfo
 import com.buzbuz.smartautoclicker.database.room.ClickEntity
 import com.buzbuz.smartautoclicker.database.room.ClickWithConditions
@@ -49,6 +53,15 @@ internal object TestsData {
         CLICK_CONDITION_OPERATOR, CLICK_DELAY_AFTER, CLICK_PRIORITY
     )
     /**
+     * Instantiates a new [ClickInfo] based on [CLICK_ENTITY].
+     * @param id the identifier for this click
+     * @param priority the priority in its list.
+     * @param conditions the list of click conditions.
+     */
+    fun newClickInfo(id: Long = CLICK_ID, priority: Int = CLICK_PRIORITY, conditions: List<ClickCondition> = emptyList()) =
+        ClickInfo(CLICK_NAME, CLICK_SCENARIO_ID, CLICK_TYPE, Point(CLICK_FROMX, CLICK_FROMY), Point(0, 0),
+            CLICK_CONDITION_OPERATOR, conditions, id, CLICK_DELAY_AFTER, priority)
+    /**
      * Instantiates a new [ClickWithConditions] based on [CLICK_ENTITY].
      * @param scenarioId the scenario for this click
      * @param clickId the id for this click. Use 0 to let the database creates one.
@@ -73,6 +86,15 @@ internal object TestsData {
         CLICK_TOX_2, CLICK_TOY_2, CLICK_CONDITION_OPERATOR_2, CLICK_DELAY_AFTER_2, CLICK_PRIORITY_2
     )
     /**
+     * Instantiates a new [ClickInfo] based on [CLICK_ENTITY].
+     * @param id the identifier for this click
+     * @param priority the priority in its list.
+     * @param conditions the list of click conditions.
+     */
+    fun newClickInfo2(id: Long = CLICK_ID_2, priority: Int = CLICK_PRIORITY_2, conditions: List<ClickCondition> = emptyList()) =
+        ClickInfo(CLICK_NAME_2, CLICK_SCENARIO_ID_2, CLICK_TYPE_2, Point(CLICK_FROMX_2, CLICK_FROMY_2),
+            Point(CLICK_TOX_2, CLICK_TOY_2), CLICK_CONDITION_OPERATOR_2, conditions, id, CLICK_DELAY_AFTER_2, priority)
+    /**
      * Instantiates a new [ClickWithConditions] based on [CLICK_ENTITY_2].
      * @param scenarioId the scenario for this click
      * @param clickId the id for this click. Use 0 to let the database creates one.
@@ -81,6 +103,8 @@ internal object TestsData {
     fun newClickWithConditionEntity2(scenarioId: Long, clickId: Long = 0, conditions: List<ConditionEntity> = emptyList()) =
         ClickWithConditions(CLICK_ENTITY.copy(clickId = clickId, scenarioId = scenarioId), conditions)
 
+    const val CLICK_ID_3 = 1418L
+
     const val CONDITION_PATH = "/toto/tutu/tata"
     const val CONDITION_LEFT = 0
     const val CONDITION_TOP = 45
@@ -88,9 +112,16 @@ internal object TestsData {
     const val CONDITION_BOTTOM = 89
     const val CONDITION_WIDTH = CONDITION_RIGHT - CONDITION_LEFT
     const val CONDITION_HEIGHT = CONDITION_BOTTOM - CONDITION_TOP
+    const val CONDITION_THRESHOLD = 25
     val CONDITION_ENTITY = ConditionEntity(
         CONDITION_PATH, CONDITION_LEFT, CONDITION_TOP, CONDITION_RIGHT,
-        CONDITION_BOTTOM, CONDITION_WIDTH, CONDITION_HEIGHT
+        CONDITION_BOTTOM, CONDITION_WIDTH, CONDITION_HEIGHT,
+        CONDITION_THRESHOLD
+    )
+    val CONDITION = ClickCondition(
+        Rect(CONDITION_LEFT, CONDITION_TOP, CONDITION_RIGHT, CONDITION_BOTTOM),
+        CONDITION_PATH,
+        CONDITION_THRESHOLD
     )
 
     const val CONDITION_PATH_2 = "/titi/tete/tyty"
@@ -100,8 +131,15 @@ internal object TestsData {
     const val CONDITION_BOTTOM_2 = 50
     const val CONDITION_WIDTH_2 = CONDITION_RIGHT_2 - CONDITION_LEFT_2
     const val CONDITION_HEIGHT_2 = CONDITION_BOTTOM_2 - CONDITION_TOP_2
+    const val CONDITION_THRESHOLD_2 = 12
     val CONDITION_ENTITY_2 = ConditionEntity(
         CONDITION_PATH_2, CONDITION_LEFT_2, CONDITION_TOP_2, CONDITION_RIGHT_2,
-        CONDITION_BOTTOM_2, CONDITION_WIDTH_2, CONDITION_HEIGHT_2
+        CONDITION_BOTTOM_2, CONDITION_WIDTH_2, CONDITION_HEIGHT_2,
+        CONDITION_THRESHOLD_2
+    )
+    val CONDITION_2 = ClickCondition(
+        Rect(CONDITION_LEFT_2, CONDITION_TOP_2, CONDITION_RIGHT_2, CONDITION_BOTTOM_2),
+        CONDITION_PATH_2,
+        CONDITION_THRESHOLD_2
     )
 }

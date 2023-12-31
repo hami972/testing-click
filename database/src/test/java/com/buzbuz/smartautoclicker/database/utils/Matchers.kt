@@ -16,25 +16,10 @@
  */
 package com.buzbuz.smartautoclicker.database.utils
 
-import com.buzbuz.smartautoclicker.database.room.ScenarioWithClicks
-
-import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers.equalTo
-
-import org.hamcrest.collection.IsIterableContainingInAnyOrder
+import org.mockito.Mockito
 
 /**
- * Asserts that two scenario list are equal, even if their order aren't the same in the list.
- * If they are not equals, an {@link AssertionError} is thrown.
- *
- * @param expected expected list of scenario.
- * @param actual the actual value from the database to be checked.
+ * Argument matcher for a nonnull kotlin function argument matching any nonnull value.
+ * @param T the type of the argument.
  */
-internal fun assertScenarioListAreEquals(expected: List<ScenarioWithClicks>, actual: List<ScenarioWithClicks>) {
-    assertThat(actual.map { it.scenario }, IsIterableContainingInAnyOrder(expected.map { equalTo(it.scenario) }))
-    actual.forEach { actualScenario ->
-        val expectedScenario = expected.find { it.scenario.id == actualScenario.scenario.id }
-        assertThat(actualScenario.clicks, IsIterableContainingInAnyOrder(expectedScenario!!.clicks.map { equalTo(it) }))
-    }
-}
-
+fun <T> anyNotNull(): T = Mockito.any()
