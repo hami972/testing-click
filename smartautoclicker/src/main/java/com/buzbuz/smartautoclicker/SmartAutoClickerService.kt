@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2020 Nain57
+ * Copyright (C) 2023 Kevin Buzeau
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -12,46 +12,56 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; If not, see <http://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package com.buzbuz.smartautoclicker
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.accessibilityservice.GestureDescription.StrokeDescription
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.app.*
+import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.Path
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+
 import androidx.core.app.NotificationCompat
 
-import com.buzbuz.smartautoclicker.database.ClickInfo
-import com.buzbuz.smartautoclicker.database.ClickScenario
+import com.buzbuz.smartautoclicker.SmartAutoClickerService.Companion.LOCAL_SERVICE_INSTANCE
+import com.buzbuz.smartautoclicker.SmartAutoClickerService.Companion.getLocalService
+import com.buzbuz.smartautoclicker.SmartAutoClickerService.LocalService
 import com.buzbuz.smartautoclicker.activity.ScenarioActivity
-import com.buzbuz.smartautoclicker.model.DetectorModel
-import com.buzbuz.smartautoclicker.overlays.MainMenu
-import com.buzbuz.smartautoclicker.baseui.overlays.OverlayController
+import com.buzbuz.smartautoclicker.core.ui.overlays.OverlayController
+import com.buzbuz.smartautoclicker.core.ui.utils.ScreenMetrics
+import com.buzbuz.smartautoclicker.core.domain.model.scenario.Scenario
+import com.buzbuz.smartautoclicker.core.processing.data.AndroidExecutor
+import com.buzbuz.smartautoclicker.core.processing.domain.DetectionRepository
+import com.buzbuz.smartautoclicker.feature.floatingmenu.ui.MainMenu
+
+import java.io.FileDescriptor
+import java.io.PrintWriter
+
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 /**
  * AccessibilityService implementation for the SmartAutoClicker.
  *
  * Started automatically by Android once the user has defined this service has an accessibility service, it provides
- * an API to start and stop the [DetectorModel] correctly in order to display the overlay UI and record the screen for
+ * an API to start and stop the [DetectorEngine] correctly in order to display the overlay UI and record the screen for
  * clicks detection.
  * This API is offered through the [LocalService] class, which is instantiated in the [LOCAL_SERVICE_INSTANCE] object.
  * This system is used instead of the usual binder interface because an [AccessibilityService] already has its own
  * binder and it can't be changed. To access this local service, use [getLocalService].
  *
- * We need this service to be an accessibility service in order to inject the detected clicks on the currently
- * displayed activity. This injection is made by the [performClick] method, which is called everytime a [ClickInfo] has
+ * We need this service to be an accessibility service in order to inject the detected event on the currently
+ * displayed activity. This injection is made by the [dispatchGesture] method, which is called everytime an event has
  * been detected.
  */
-class SmartAutoClickerService : AccessibilityService() {
+class SmartAutoClickerService : AccessibilityService(), AndroidExecutor {
 
     companion object {
         /** The identifier for the foreground notification of this service. */
@@ -83,6 +93,10 @@ class SmartAutoClickerService : AccessibilityService() {
         }
     }
 
+    /** The metrics of the device screen. */
+    private var screenMetrics: ScreenMetrics? = null
+    /** The engine for the detection. */
+    private var detectionRepository: DetectionRepository? = null
     /** The root controller for the overlay ui. */
     private var rootOverlayController: OverlayController? = null
     /** True if the overlay is started, false if not. */
@@ -105,18 +119,34 @@ class SmartAutoClickerService : AccessibilityService() {
          * [android.app.Activity.onActivityResult]
          * @param scenario the identifier of the scenario of clicks to be used for detection.
          */
-        fun start(resultCode: Int, data: Intent, scenario: ClickScenario) {
+        fun start(resultCode: Int, data: Intent, scenario: Scenario) {
             if (isStarted) {
                 return
             }
 
             isStarted = true
             startForeground(NOTIFICATION_ID, createNotification(scenario.name))
-            DetectorModel.attach(this@SmartAutoClickerService)
-            DetectorModel.get().init(this@SmartAutoClickerService, resultCode, data, scenario)
-            rootOverlayController = MainMenu(this@SmartAutoClickerService, ::performClick).apply {
-                create(::stop)
+
+            screenMetrics = ScreenMetrics.getInstance(this@SmartAutoClickerService).apply {
+                startMonitoring(this@SmartAutoClickerService)
             }
+
+            detectionRepository = DetectionRepository.getDetectionRepository(this@SmartAutoClickerService).apply {
+                startScreenRecord(
+                    context = this@SmartAutoClickerService,
+                    resultCode = resultCode,
+                    data = data,
+                    androidExecutor = this@SmartAutoClickerService,
+                    scenarioDbId = scenario.id.databaseId,
+                )
+            }
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                rootOverlayController = MainMenu(this@SmartAutoClickerService, scenario.id.databaseId).apply {
+                    create { this@LocalService.stop() }
+                    show()
+                }
+            }, 350)
         }
 
         /** Stop the overlay UI and release all associated resources. */
@@ -126,10 +156,17 @@ class SmartAutoClickerService : AccessibilityService() {
             }
 
             isStarted = false
-            rootOverlayController?.dismiss()
-            DetectorModel.get().stop(this@SmartAutoClickerService)
-            DetectorModel.detach(this@SmartAutoClickerService)
-            stopForeground(true)
+
+            rootOverlayController?.destroy()
+            rootOverlayController = null
+
+            detectionRepository?.stopScreenRecord()
+            detectionRepository = null
+
+            screenMetrics?.stopMonitoring(this@SmartAutoClickerService)
+            screenMetrics = null
+
+            stopForeground(Service.STOP_FOREGROUND_REMOVE)
         }
     }
 
@@ -152,12 +189,12 @@ class SmartAutoClickerService : AccessibilityService() {
      * @return the newly created notification.
      */
     private fun createNotification(scenarioName: String): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager!!.createNotificationChannel(
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(
                 NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
-                    getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW
+                    getString(R.string.notification_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
                 )
             )
         }
@@ -166,34 +203,60 @@ class SmartAutoClickerService : AccessibilityService() {
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_title, scenarioName))
             .setContentText(getString(R.string.notification_message))
-            .setContentIntent(PendingIntent.getActivity(this, 0, intent, 0))
+            .setContentIntent(PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE))
             .setSmallIcon(R.drawable.ic_notification)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .setOngoing(true)
+            .setLocalOnly(true)
             .build()
     }
 
-    /**
-     * Perform the provided click on the current activity.
-     *
-     * @param click the click to be performed.
-     */
-    private fun performClick(click: ClickInfo) {
-        val clickPath = Path()
-        val clickBuilder = GestureDescription.Builder()
-
-        clickPath.moveTo(click.from!!.x.toFloat(), click.from!!.y.toFloat())
-        when (click.type) {
-            ClickInfo.SINGLE -> {
-                clickBuilder.addStroke(StrokeDescription(clickPath, 0, 1))
-            }
-            ClickInfo.SWIPE -> {
-                clickPath.lineTo(click.to!!.x.toFloat(), click.to!!.y.toFloat())
-                clickBuilder.addStroke(StrokeDescription(clickPath, 0, 175))
-            }
+    override suspend fun executeGesture(gestureDescription: GestureDescription) {
+        suspendCoroutine<Unit?> { continuation ->
+            dispatchGesture(
+                gestureDescription,
+                object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) = continuation.resume(null)
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        Log.w(TAG, "Gesture cancelled: $gestureDescription")
+                        continuation.resume(null)
+                    }
+                },
+                null,
+            )
         }
+    }
 
-        dispatchGesture(clickBuilder.build(), null, null)
+    override fun executeStartActivity(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (anfe: ActivityNotFoundException) {
+            Log.w(TAG, "Can't start activity, it is not found.")
+        }
+    }
+
+    override fun executeSendBroadcast(intent: Intent) {
+        sendBroadcast(intent)
+    }
+
+    /**
+     * Dump the state of the service via adb.
+     * adb shell "dumpsys activity service com.buzbuz.smartautoclicker.debug/com.buzbuz.smartautoclicker.SmartAutoClickerService"
+     */
+    override fun dump(fd: FileDescriptor?, writer: PrintWriter?, args: Array<out String>?) {
+        super.dump(fd, writer, args)
+
+        if (writer == null) return
+
+        writer.println("* UI:")
+        val prefix = "\t"
+
+        rootOverlayController?.dump(writer, prefix) ?: writer.println("$prefix None")
     }
 
     override fun onInterrupt() { /* Unused */ }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* Unused */ }
 }
+
+/** Tag for the logs. */
+private const val TAG = "SmartAutoClickerService"

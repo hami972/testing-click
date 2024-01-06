@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2020 Nain57
+ * Copyright (C) 2023 Kevin Buzeau
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -12,26 +12,32 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; If not, see <http://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package com.buzbuz.smartautoclicker.activity
 
+import android.Manifest
 import android.app.Dialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.widget.ImageView
+
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 
 import com.buzbuz.smartautoclicker.R
-import com.buzbuz.smartautoclicker.extensions.setCustomTitle
-import com.buzbuz.smartautoclicker.model.ScenarioViewModel
 import com.buzbuz.smartautoclicker.SmartAutoClickerService
+import com.buzbuz.smartautoclicker.databinding.DialogPermissionsBinding
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * Displays the state of the permission and provide a way to access their respective settings.
@@ -42,6 +48,8 @@ class PermissionsDialogFragment : DialogFragment() {
 
     companion object {
 
+        /** Tag for permission dialog fragment. */
+        const val FRAGMENT_TAG_PERMISSION_DIALOG = "PermissionDialog"
         /** Intent extra bundle key for the Android settings app. */
         private const val EXTRA_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
         /** Intent extra bundle key for the Android settings app. */
@@ -67,21 +75,24 @@ class PermissionsDialogFragment : DialogFragment() {
 
     /** ViewModel providing the click scenarios data to the UI. */
     private val scenarioViewModel: ScenarioViewModel by activityViewModels()
-    /** View for the overlay permission. */
-    private lateinit var overlayView: View
-    /** View for the state of the overlay permission. */
-    private lateinit var overlayStateView: ImageView
-    /** View for the accessibility service permission. */
-    private lateinit var accessibilityView: View
-    /** View for the state of the accessibility service permission. */
-    private lateinit var accessibilityStateView: ImageView
+    /** ViewBinding for this dialog. */
+    private lateinit var viewBinding: DialogPermissionsBinding
+    /** Launcher for requesting the notification permission. */
+    private lateinit var notifPermLauncher: ActivityResultLauncher<String>
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return AlertDialog.Builder(requireContext())
-            .setCustomTitle(R.layout.view_dialog_title, R.string.dialog_permissions_title)
-            .setView(R.layout.dialog_permissions)
+        viewBinding = DialogPermissionsBinding.inflate(layoutInflater)
+
+        notifPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            setConfigStateDrawable(viewBinding.imgConfigNotificationStatus, granted)
+        }
+
+        return MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.dialog_title_permissions)
+            .setView(viewBinding.root)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                (activity as PermissionDialogListener).onPermissionsGranted()
+                (activity?.supportFragmentManager?.findFragmentByTag(FRAGMENT_TAG_SCENARIO_LIST) as PermissionDialogListener)
+                    .onPermissionsGranted()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .create()
@@ -89,20 +100,22 @@ class PermissionsDialogFragment : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        dialog?.let {
-            overlayStateView = it.findViewById(R.id.img_config_overlay_status)
-            overlayView = it.findViewById(R.id.item_overlay_permission)
-            overlayView.setOnClickListener{ onOverlayClicked() }
-            accessibilityStateView = it.findViewById(R.id.img_config_accessibility_status)
-            accessibilityView = it.findViewById(R.id.item_accessibility_permission)
-            accessibilityView.setOnClickListener { onAccessibilityClicked() }
+        viewBinding.itemOverlayPermission.setOnClickListener{ onOverlayClicked() }
+        viewBinding.itemAccessibilityPermission.setOnClickListener { onAccessibilityClicked() }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            viewBinding.itemNotificationPermission.visibility = View.GONE
+        } else {
+            viewBinding.itemNotificationPermission.visibility = View.VISIBLE
+            viewBinding.itemNotificationPermission.setOnClickListener { onNotificationClicked() }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        setConfigStateDrawable(overlayStateView, scenarioViewModel.isOverlayPermissionValid())
-        setConfigStateDrawable(accessibilityStateView, scenarioViewModel.isAccessibilityPermissionValid())
+        setConfigStateDrawable(viewBinding.imgConfigOverlayStatus, scenarioViewModel.isOverlayPermissionValid())
+        setConfigStateDrawable(viewBinding.imgConfigAccessibilityStatus, scenarioViewModel.isAccessibilityPermissionValid())
+        setConfigStateDrawable(viewBinding.imgConfigNotificationStatus, scenarioViewModel.isNotificationPermissionGranted())
         (dialog as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).isEnabled =
             scenarioViewModel.isOverlayPermissionValid() && scenarioViewModel.isAccessibilityPermissionValid()
     }
@@ -138,6 +151,16 @@ class PermissionsDialogFragment : DialogFragment() {
         intent.putExtra(EXTRA_SHOW_FRAGMENT_ARGUMENTS, bundle)
 
         requireContext().startActivity(intent)
+    }
+
+    /**
+     * Called when the user clicks on the Notification permission state.
+     * This will shows the Android permission screen for the notification. Note that this permission is only visible
+     * for users on Android 13+.
+     */
+    private fun onNotificationClicked() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     /**
