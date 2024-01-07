@@ -16,7 +16,6 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.click
 
-import android.content.Context
 import android.graphics.Point
 import android.text.InputFilter
 import android.text.InputType
@@ -25,7 +24,6 @@ import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
@@ -37,41 +35,42 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
 import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.utils.MinMaxInputFilter
-import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialogController
-import com.buzbuz.smartautoclicker.core.domain.model.action.Action
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
 import com.buzbuz.smartautoclicker.core.domain.model.action.GESTURE_DURATION_MAX_VALUE
+import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
+import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionClickBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.ClickSwipeSelectorMenu
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.CoordinatesSelector
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
+
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 import kotlinx.coroutines.launch
 
 class ClickDialog(
-    context: Context,
-    private val editedClick: Action.Click,
-    private val onDeleteClicked: (Action.Click) -> Unit,
-    private val onConfirmClicked: (Action.Click) -> Unit,
-) : OverlayDialogController(context, R.style.ScenarioConfigTheme) {
+    private val onConfirmClicked: () -> Unit,
+    private val onDeleteClicked: () -> Unit,
+    private val onDismissClicked: () -> Unit,
+) : OverlayDialog(R.style.ScenarioConfigTheme) {
 
     /** The view model for this dialog. */
-    private val viewModel: ClickViewModel by lazy {
-        ViewModelProvider(this).get(ClickViewModel::class.java)
-    }
+    private val viewModel: ClickViewModel by viewModels()
 
     /** ViewBinding containing the views for this dialog. */
     private lateinit var viewBinding: DialogConfigActionClickBinding
 
     override fun onCreateView(): ViewGroup {
-        viewModel.setConfiguredClick(editedClick)
-
         viewBinding = DialogConfigActionClickBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_click)
 
-                buttonDismiss.setOnClickListener { destroy() }
+                buttonDismiss.setOnClickListener {
+                    onDismissClicked()
+                    back()
+                }
                 buttonSave.apply {
                     visibility = View.VISIBLE
                     setOnClickListener { onSaveButtonClicked() }
@@ -92,7 +91,7 @@ class ClickDialog(
             hideSoftInputOnFocusLoss(editNameLayout.textField)
 
             editPressDurationLayout.apply {
-                textField.filters = arrayOf(MinMaxInputFilter(0, GESTURE_DURATION_MAX_VALUE.toInt()))
+                textField.filters = arrayOf(MinMaxInputFilter(1, GESTURE_DURATION_MAX_VALUE.toInt()))
                 setLabel(R.string.input_field_label_click_press_duration)
                 setOnTextChangedListener {
                     viewModel.setPressDuration(if (it.isNotEmpty()) it.toString().toLong() else null)
@@ -128,13 +127,13 @@ class ClickDialog(
 
     private fun onSaveButtonClicked() {
         viewModel.saveLastConfig()
-        onConfirmClicked(viewModel.getConfiguredClick())
-        destroy()
+        onConfirmClicked()
+        back()
     }
 
     private fun onDeleteButtonClicked() {
-        onDeleteClicked(editedClick)
-        destroy()
+        onDeleteClicked()
+        back()
     }
 
     private fun updateClickName(newName: String?) {
@@ -175,13 +174,13 @@ class ClickDialog(
     }
 
     private fun updateSaveButton(isValidCondition: Boolean) {
-        viewBinding.layoutTopBar.setButtonEnabledState(com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.SAVE, isValidCondition)
+        viewBinding.layoutTopBar.setButtonEnabledState(DialogNavigationButton.SAVE, isValidCondition)
     }
 
-    private fun showPositionSelector() {
-        showSubOverlay(
-            overlayController = ClickSwipeSelectorMenu(
-                context = context,
+    private fun showPositionSelector() =
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ClickSwipeSelectorMenu(
                 selector = CoordinatesSelector.One(),
                 onCoordinatesSelected = { selector ->
                     (selector as CoordinatesSelector.One).coordinates?.let {
@@ -193,5 +192,4 @@ class ClickDialog(
             ),
             hideCurrent = true,
         )
-    }
 }

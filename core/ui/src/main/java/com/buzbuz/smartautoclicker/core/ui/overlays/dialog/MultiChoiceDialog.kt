@@ -16,7 +16,6 @@
  */
 package com.buzbuz.smartautoclicker.core.ui.overlays.dialog
 
-import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,28 +34,26 @@ import com.buzbuz.smartautoclicker.core.ui.databinding.ItemMultiChoiceSmallBindi
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 /**
- * [OverlayDialogController] implementation for a dialog displaying a list of choices to the user.
+ * [OverlayDialog] implementation for a dialog displaying a list of choices to the user.
  *
  * @param T the type of choices in the list. Must extends [DialogChoice].
- * @param context the Android Context for the dialog shown by this controller.
  * @param theme the resource id of the theme to apply.
  * @param dialogTitleText the title of the dialog.
  * @param choices the choices to be displayed.
  * @param onChoiceSelected the callback to be notified upon user choice selection.
  */
-class MultiChoiceDialog<T : DialogChoice>(
-    context: Context,
+open class MultiChoiceDialog<T : DialogChoice>(
     @StyleRes theme: Int,
     @StringRes private val dialogTitleText: Int,
     private val choices: List<T>,
-    private val onChoiceSelected: (T) -> Boolean,
+    private val onChoiceSelected: (T) -> Unit,
     private val onCanceled: () -> Unit,
-) : OverlayDialogController(context, theme) {
+) : OverlayDialog(theme) {
 
     /** ViewBinding containing the views for this dialog. */
-    private lateinit var viewBinding: DialogBaseMultiChoiceBinding
+    protected lateinit var viewBinding: DialogBaseMultiChoiceBinding
     /** The adapter displaying the choices. */
-    private lateinit var adapter: ChoiceAdapter<T>
+    protected lateinit var adapter: ChoiceAdapter<T>
 
     override fun onCreateView(): ViewGroup {
         viewBinding = DialogBaseMultiChoiceBinding.inflate(LayoutInflater.from(context)).apply {
@@ -64,13 +61,18 @@ class MultiChoiceDialog<T : DialogChoice>(
                 dialogTitle.setText(dialogTitleText)
                 buttonDismiss.setOnClickListener {
                     onCanceled()
-                    destroy()
+                    back()
                 }
             }
 
-            adapter = ChoiceAdapter(choices) { choice ->
-                if (onChoiceSelected(choice)) destroy()
-            }
+            adapter = ChoiceAdapter(
+                choices = choices,
+                onChoiceSelected = { choice ->
+                    back()
+                    onChoiceSelected(choice)
+                },
+                onChoiceViewBound = ::onChoiceViewBound,
+            )
         }
 
         return viewBinding.root
@@ -79,6 +81,8 @@ class MultiChoiceDialog<T : DialogChoice>(
     override fun onDialogCreated(dialog: BottomSheetDialog) {
         viewBinding.list.adapter = adapter
     }
+
+    open fun onChoiceViewBound(choice: T, view: View?) = Unit
 }
 
 /**
@@ -88,9 +92,10 @@ class MultiChoiceDialog<T : DialogChoice>(
  * @param choices the choices to be displayed in the list.
  * @param onChoiceSelected called when the user clicks on a choice.
  */
-private class ChoiceAdapter<T : DialogChoice>(
+class ChoiceAdapter<T : DialogChoice>(
     private val choices: List<T>,
     private val onChoiceSelected: (T) -> Unit,
+    private val onChoiceViewBound: ((T, View?) -> Unit),
 ): RecyclerView.Adapter<MultiChoiceViewHolder<T>>() {
 
     override fun getItemCount(): Int = choices.size
@@ -114,7 +119,15 @@ private class ChoiceAdapter<T : DialogChoice>(
         }
 
     override fun onBindViewHolder(holder: MultiChoiceViewHolder<T>, position: Int) {
-         holder.onBind(choices[position], onChoiceSelected)
+        choices[position].let { choice ->
+            holder.onBind(choice, onChoiceSelected)
+            onChoiceViewBound(choice, holder.itemView)
+        }
+    }
+
+    override fun onViewRecycled(holder: MultiChoiceViewHolder<T>) {
+        super.onViewRecycled(holder)
+        onChoiceViewBound(choices[holder.bindingAdapterPosition], null)
     }
 }
 
@@ -122,7 +135,7 @@ private class ChoiceAdapter<T : DialogChoice>(
  * Base view holder for a choice.
  * @param itemView the root view of the item.
  */
-private abstract class MultiChoiceViewHolder<T : DialogChoice>(itemView: View): ViewHolder(itemView) {
+abstract class MultiChoiceViewHolder<T : DialogChoice>(itemView: View): ViewHolder(itemView) {
 
     /**
      * Binds a choice to this view holder.

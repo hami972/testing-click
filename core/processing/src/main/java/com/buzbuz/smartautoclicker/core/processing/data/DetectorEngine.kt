@@ -123,16 +123,15 @@ internal class DetectorEngine(context: Context) {
         processingScope = CoroutineScope(Dispatchers.IO)
         displayMetrics.addOrientationListener(orientationListener)
 
-        screenRecorder.apply {
-            startProjection(context, resultCode, data) {
-                this@DetectorEngine.stopScreenRecord()
-            }
-
-            processingScope?.launch {
+        processingScope?.launch {
+            screenRecorder.apply {
+                startProjection(context, resultCode, data) {
+                    this@DetectorEngine.stopScreenRecord()
+                }
                 startScreenRecord(context, displayMetrics.screenSize)
-
-                _state.emit(DetectorState.RECORDING)
             }
+
+            _state.emit(DetectorState.RECORDING)
         }
     }
 
@@ -148,6 +147,7 @@ internal class DetectorEngine(context: Context) {
      * @param progressListener object to notify upon start/completion of detections steps.
      */
     fun startDetection(
+        context: Context,
         scenario: Scenario,
         events: List<Event>,
         endConditions: List<EndCondition>,
@@ -164,7 +164,9 @@ internal class DetectorEngine(context: Context) {
 
         processingScope?.launchProcessingJob {
             imageDetector = NativeDetector()
+
             detectionProgressListener = progressListener
+            progressListener?.onSessionStarted(context, scenario, events)
 
             scenarioProcessor = ScenarioProcessor(
                 imageDetector = imageDetector!!,

@@ -21,7 +21,6 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
@@ -31,27 +30,21 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.updateState
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.NavigationRequest
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.condition.ConditionDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.condition.ConditionSelectorMenu
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.condition.copy.ConditionCopyDialog
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.EventDialogViewModel
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_DISABLED_ITEM
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_ENABLED_ITEM
 import com.buzbuz.smartautoclicker.core.ui.databinding.IncludeLoadableListBinding
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.viewModels
 
 import kotlinx.coroutines.launch
 
 class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
 
-    /** View model for the container dialog. */
-    private val dialogViewModel: EventDialogViewModel by lazy {
-        ViewModelProvider(dialogController).get(EventDialogViewModel::class.java)
-    }
     /** View model for this content. */
-    private val viewModel: ConditionsViewModel by lazy {
-        ViewModelProvider(this).get(ConditionsViewModel::class.java)
-    }
+    private val viewModel: ConditionsViewModel by viewModels()
 
     /** View binding for all views in this content. */
     private lateinit var viewBinding: IncludeLoadableListBinding
@@ -105,18 +98,31 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.isConditionLimitReached.collect(::updateConditionLimitationVisibility) }
                 launch { viewModel.canCopyCondition.collect(::updateCopyButtonVisibility) }
-                launch { viewModel.conditions.collect(::updateConditionList) }
+                launch { viewModel.configuredEventConditions.collect(::updateConditionList) }
             }
         }
     }
 
-    override fun onCreateButtonClicked() {
-        dialogViewModel.requestSubOverlay(newConditionSelectorNavigationRequest())
-    }
+    override fun onCreateButtonClicked() =
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ConditionSelectorMenu(
+                onConditionSelected = { area, bitmap ->
+                    showConditionConfigDialog(viewModel.createCondition(context, area, bitmap))
+                }
+            ),
+            hideCurrent = true,
+        )
 
-    override fun onCopyButtonClicked() {
-        dialogViewModel.requestSubOverlay(newConditionCopyNavigationRequest())
-    }
+    override fun onCopyButtonClicked() =
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ConditionCopyDialog(
+                onConditionSelected = { conditionSelected ->
+                    showConditionConfigDialog(viewModel.createNewConditionFromCopy(conditionSelected))
+                },
+            ),
+        )
 
     private fun onCreateCopyClickedWhileLimited() {
         conditionLimitReachedClick = true
@@ -126,7 +132,7 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
     }
 
     private fun onConditionClicked(condition: Condition) {
-        dialogViewModel.requestSubOverlay(newConditionConfigNavigationRequest(condition))
+        showConditionConfigDialog(condition)
     }
 
     private fun updateConditionLimitationVisibility(isVisible: Boolean) {
@@ -154,38 +160,16 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
         conditionsAdapter.submitList(newItems)
     }
 
-    private fun newConditionSelectorNavigationRequest() = NavigationRequest(
-        overlay = ConditionSelectorMenu(
-            context = context,
-            onConditionSelected = { area, bitmap ->
-                dialogViewModel.requestSubOverlay(
-                    newConditionConfigNavigationRequest(
-                        viewModel.createCondition(context, area, bitmap)
-                    )
-                )
-            }
-        ),
-        hideCurrent = true,
-    )
+    private fun showConditionConfigDialog(condition: Condition) {
+        viewModel.startConditionEdition(condition)
 
-    private fun newConditionCopyNavigationRequest() = NavigationRequest(
-        ConditionCopyDialog(
+        OverlayManager.getInstance(context).navigateTo(
             context = context,
-            conditions = viewModel.conditions.value!!,
-            onConditionSelected = { conditionSelected ->
-                dialogViewModel.requestSubOverlay(
-                    newConditionConfigNavigationRequest(conditionSelected)
-                )
-            }
+            newOverlay = ConditionDialog(
+                onConfirmClicked = viewModel::upsertEditedCondition,
+                onDeleteClicked = viewModel::removeEditedCondition,
+                onDismissClicked = viewModel::dismissEditedCondition
+            ),
         )
-    )
-
-    private fun newConditionConfigNavigationRequest(condition: Condition) = NavigationRequest(
-        ConditionDialog(
-            context = context,
-            condition = condition,
-            onConfirmClicked = { viewModel.upsertCondition(it) },
-            onDeleteClicked = { viewModel.removeCondition(condition) }
-        )
-    )
+    }
 }

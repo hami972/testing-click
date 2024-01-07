@@ -16,7 +16,6 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.swipe
 
-import android.content.Context
 import android.graphics.Point
 import android.text.InputFilter
 import android.text.InputType
@@ -34,9 +33,9 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.utils.MinMaxInputFilter
-import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialogController
-import com.buzbuz.smartautoclicker.core.domain.model.action.Action
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
 import com.buzbuz.smartautoclicker.core.domain.model.action.GESTURE_DURATION_MAX_VALUE
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionSwipeBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.ClickSwipeSelectorMenu
@@ -47,11 +46,10 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.launch
 
 class SwipeDialog(
-    context: Context,
-    private val editedSwipe: Action.Swipe,
-    private val onDeleteClicked: (Action.Swipe) -> Unit,
-    private val onConfirmClicked: (Action.Swipe) -> Unit,
-) : OverlayDialogController(context, R.style.ScenarioConfigTheme) {
+    private val onConfirmClicked: () -> Unit,
+    private val onDeleteClicked: () -> Unit,
+    private val onDismissClicked: () -> Unit,
+) : OverlayDialog(R.style.ScenarioConfigTheme) {
 
     /** The view model for this dialog. */
     private val viewModel: SwipeViewModel by lazy {
@@ -62,13 +60,14 @@ class SwipeDialog(
     private lateinit var viewBinding: DialogConfigActionSwipeBinding
 
     override fun onCreateView(): ViewGroup {
-        viewModel.setConfiguredSwipe(editedSwipe)
-
         viewBinding = DialogConfigActionSwipeBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_swipe)
 
-                buttonDismiss.setOnClickListener { destroy() }
+                buttonDismiss.setOnClickListener {
+                    onDismissClicked()
+                    back()
+                }
                 buttonSave.apply {
                     visibility = View.VISIBLE
                     setOnClickListener { onSaveButtonClicked() }
@@ -89,7 +88,7 @@ class SwipeDialog(
             hideSoftInputOnFocusLoss(editNameLayout.textField)
 
             editSwipeDurationLayout.apply {
-                textField.filters = arrayOf(MinMaxInputFilter(0, GESTURE_DURATION_MAX_VALUE.toInt()))
+                textField.filters = arrayOf(MinMaxInputFilter(1, GESTURE_DURATION_MAX_VALUE.toInt()))
                 setLabel(R.string.input_field_label_swipe_duration)
                 setOnTextChangedListener {
                     viewModel.setSwipeDuration(if (it.isNotEmpty()) it.toString().toLong() else null)
@@ -118,13 +117,13 @@ class SwipeDialog(
 
     private fun onSaveButtonClicked() {
         viewModel.saveLastConfig()
-        onConfirmClicked(viewModel.getConfiguredSwipe())
-        destroy()
+        onConfirmClicked()
+        back()
     }
 
     private fun onDeleteButtonClicked() {
-        onDeleteClicked(editedSwipe)
-        destroy()
+        onDeleteClicked()
+        back()
     }
 
     private fun updateClickName(newName: String?) {
@@ -155,9 +154,9 @@ class SwipeDialog(
     }
 
     private fun showPositionSelector() {
-        showSubOverlay(
-            overlayController = ClickSwipeSelectorMenu(
-                context = context,
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ClickSwipeSelectorMenu(
                 selector = CoordinatesSelector.Two(),
                 onCoordinatesSelected = { selector ->
                     (selector as CoordinatesSelector.Two).let {

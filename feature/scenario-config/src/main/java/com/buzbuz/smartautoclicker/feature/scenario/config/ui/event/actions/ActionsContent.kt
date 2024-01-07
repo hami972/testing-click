@@ -21,7 +21,6 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -32,7 +31,6 @@ import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.MultiChoiceDialog
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.NavigationRequest
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.click.ClickDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.copy.ActionCopyDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.intent.IntentDialog
@@ -40,23 +38,18 @@ import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.pause.Pause
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.swipe.SwipeDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.toggleevent.ToggleEventDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.bindings.ActionDetails
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.EventDialogViewModel
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_DISABLED_ITEM
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_ENABLED_ITEM
 import com.buzbuz.smartautoclicker.core.ui.databinding.IncludeLoadableListBinding
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.viewModels
 
 import kotlinx.coroutines.launch
 
 class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
 
-    /** View model for the container dialog. */
-    private val dialogViewModel: EventDialogViewModel by lazy {
-        ViewModelProvider(dialogController).get(EventDialogViewModel::class.java)
-    }
     /** View model for this content. */
-    private val viewModel: ActionsViewModel by lazy {
-        ViewModelProvider(this).get(ActionsViewModel::class.java)
-    }
+    private val viewModel: ActionsViewModel by viewModels()
 
     /** TouchHelper applied to [actionAdapter] allowing to drag and drop the items. */
     private val itemTouchHelper = ItemTouchHelper(ActionReorderTouchHelper())
@@ -120,12 +113,38 @@ class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
     }
 
     override fun onCreateButtonClicked() {
-        dialogViewModel.requestSubOverlay(newActionTypeSelectionNavigationRequest())
+        val dialog = MultiChoiceDialog(
+            theme = R.style.ScenarioConfigTheme,
+            dialogTitleText = R.string.dialog_overlay_title_action_type,
+            choices = viewModel.actionCreationItems.value,
+            onChoiceSelected = { choiceClicked ->
+                if (!choiceClicked.enabled) {
+                    actionTypeSelectionDialog?.show()
+                    viewModel.onProModeUnsubscribedActionClicked(context, choiceClicked)
+                } else {
+                    actionTypeSelectionDialog = null
+                    showActionConfigDialog(viewModel.createAction(context, choiceClicked))
+                }
+            },
+            onCanceled = { actionTypeSelectionDialog = null }
+        )
+        actionTypeSelectionDialog = dialog
+
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = dialog,
+        )
     }
 
-    override fun onCopyButtonClicked() {
-        dialogViewModel.requestSubOverlay(newActionCopyNavigationRequest())
-    }
+    override fun onCopyButtonClicked() =
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ActionCopyDialog(
+                onActionSelected = { newCopyAction ->
+                    showActionConfigDialog(viewModel.createNewActionFrom(newCopyAction))
+                }
+            ),
+        )
 
     private fun onCreateCopyClickedWhileLimited() {
         actionLimitReachedClick = true
@@ -135,7 +154,7 @@ class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
     }
 
     private fun onActionClicked(action: Action) {
-        dialogViewModel.requestSubOverlay(newActionConfigNavigationRequest(action))
+        showActionConfigDialog(action)
     }
 
     private fun updateActionLimitationVisibility(isVisible: Boolean) {
@@ -163,57 +182,46 @@ class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
         actionAdapter.submitList(newList)
     }
 
-    private fun newActionTypeSelectionNavigationRequest(): NavigationRequest {
-        val dialog = MultiChoiceDialog(
-            context = context,
-            theme = R.style.ScenarioConfigTheme,
-            dialogTitleText = R.string.dialog_overlay_title_action_type,
-            choices = viewModel.actionCreationItems.value,
-            onChoiceSelected = { choiceClicked ->
-                if (!choiceClicked.enabled) {
-                    actionTypeSelectionDialog?.hide()
-                    viewModel.onProModeUnsubscribedActionClicked(context, choiceClicked)
-                    false
-                } else {
-                    actionTypeSelectionDialog = null
-                    dialogViewModel.requestSubOverlay(
-                        newActionConfigNavigationRequest(
-                            viewModel.createAction(context, choiceClicked)
-                        )
-                    )
-                    true
-                }
-            },
-            onCanceled = { actionTypeSelectionDialog = null }
-        )
-        actionTypeSelectionDialog = dialog
+    private fun showActionConfigDialog(action: Action) {
+        viewModel.startActionEdition(action)
 
-        return NavigationRequest(dialog)
-    }
-
-    private fun newActionCopyNavigationRequest() = NavigationRequest(
-        ActionCopyDialog(
-            context = context,
-            onActionSelected = { newCopyAction ->
-                dialogViewModel.requestSubOverlay(
-                    newActionConfigNavigationRequest(newCopyAction)
-                )
-            }
-        )
-    )
-
-    private fun newActionConfigNavigationRequest(action: Action): NavigationRequest {
         val overlay = when (action) {
-            is Action.Click -> ClickDialog(context, action, viewModel::removeAction, viewModel::upsertAction)
-            is Action.Swipe -> SwipeDialog(context, action, viewModel::removeAction, viewModel::upsertAction)
-            is Action.Pause -> PauseDialog(context, action, viewModel::removeAction, viewModel::upsertAction)
-            is Action.Intent -> IntentDialog(context, action, viewModel::removeAction, viewModel::upsertAction)
-            is Action.ToggleEvent -> ToggleEventDialog(context, action, viewModel::removeAction, viewModel::upsertAction)
+            is Action.Click -> ClickDialog(
+                onConfirmClicked = viewModel::upsertEditedAction,
+                onDeleteClicked = viewModel::removeEditedAction,
+                onDismissClicked = viewModel::dismissEditedAction,
+            )
+
+            is Action.Swipe -> SwipeDialog(
+                onConfirmClicked = viewModel::upsertEditedAction,
+                onDeleteClicked = viewModel::removeEditedAction,
+                onDismissClicked = viewModel::dismissEditedAction,
+            )
+
+            is Action.Pause -> PauseDialog(
+                onConfirmClicked = viewModel::upsertEditedAction,
+                onDeleteClicked = viewModel::removeEditedAction,
+                onDismissClicked = viewModel::dismissEditedAction,
+            )
+
+            is Action.Intent -> IntentDialog(
+                onConfirmClicked = viewModel::upsertEditedAction,
+                onDeleteClicked = viewModel::removeEditedAction,
+                onDismissClicked = viewModel::dismissEditedAction,
+            )
+
+            is Action.ToggleEvent -> ToggleEventDialog(
+                onConfirmClicked = viewModel::upsertEditedAction,
+                onDeleteClicked = viewModel::removeEditedAction,
+                onDismissClicked = viewModel::dismissEditedAction,
+            )
+
             else -> throw IllegalArgumentException("Not yet supported")
         }
 
-        return NavigationRequest(
-            overlay = overlay,
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = overlay,
             hideCurrent = true,
         )
     }

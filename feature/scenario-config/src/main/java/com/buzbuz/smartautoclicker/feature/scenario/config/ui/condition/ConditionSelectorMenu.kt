@@ -16,9 +16,9 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.condition
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,24 +26,26 @@ import android.view.ViewGroup
 import androidx.annotation.IntDef
 import androidx.lifecycle.ViewModelProvider
 
-import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenuController
+import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenu
 import com.buzbuz.smartautoclicker.core.ui.overlays.menu.overlayviews.condition.ConditionSelectorView
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.OverlayValidationMenuBinding
 
 /**
- * [OverlayMenuController] implementation for displaying the area selection menu and the area to be captured in order
+ * [OverlayMenu] implementation for displaying the area selection menu and the area to be captured in order
  * to create a new event condition.
  *
- * @param context the Android Context for the overlay menu shown by this controller.
  * @param onConditionSelected listener upon confirmation of the area to be capture to create the event condition.
  */
 class ConditionSelectorMenu(
-    context: Context,
     private val onConditionSelected: (Rect, Bitmap) -> Unit
-) : OverlayMenuController(context) {
+) : OverlayMenu() {
 
     private companion object {
+
+        /** Tag for logs */
+        private const val TAG = "ConditionSelectorMenu"
+
         /** Describe the state of the capture. */
         @IntDef(SELECTION, CAPTURE, ADJUST)
         @Retention(AnnotationRetention.SOURCE)
@@ -64,7 +66,7 @@ class ConditionSelectorMenu(
     /** The view binding for the overlay menu. */
     private lateinit var viewBinding: OverlayValidationMenuBinding
     /** The view displaying the screenshot and the selector for the capture. */
-    private val selectorView = ConditionSelectorView(context, displayMetrics, ::onSelectorValidityChanged)
+    private lateinit var selectorView: ConditionSelectorView
 
     /** The current state of the overlay. */
     @ConditionCaptureState
@@ -92,6 +94,7 @@ class ConditionSelectorMenu(
         }
 
     override fun onCreateMenu(layoutInflater: LayoutInflater): ViewGroup {
+        selectorView = ConditionSelectorView(context, displayMetrics, ::onSelectorValidityChanged)
         viewBinding = OverlayValidationMenuBinding.inflate(layoutInflater)
         return viewBinding.root
     }
@@ -125,19 +128,27 @@ class ConditionSelectorMenu(
      * Depending on the current [state], this will have different effect.
      */
     private fun onConfirm() {
-        if (state == SELECTION) {
-            state = CAPTURE
+        when (state) {
+            SELECTION -> {
+                state = CAPTURE
 
-            val screenSize = displayMetrics.screenSize
-            val screenRect = Rect(0, 0, screenSize.x, screenSize.y)
-            viewModel.takeScreenshot(screenRect) { screenshot ->
-                selectorView.showCapture(screenshot)
-                state = ADJUST
+                val screenSize = displayMetrics.screenSize
+                val screenRect = Rect(0, 0, screenSize.x, screenSize.y)
+                viewModel.takeScreenshot(screenRect) { screenshot ->
+                    selectorView.showCapture(screenshot)
+                    state = ADJUST
+                }
             }
-        } else {
-            val selection = selectorView.getSelection()
-            onConditionSelected(selection.first, selection.second)
-            destroy()
+
+            ADJUST -> {
+                back()
+                try {
+                    val selection = selectorView.getSelection()
+                    onConditionSelected(selection.first, selection.second)
+                } catch (ex: IllegalStateException) {
+                    Log.e(TAG, "Condition selection failed", ex)
+                }
+            }
         }
     }
 
@@ -147,7 +158,7 @@ class ConditionSelectorMenu(
      */
     private fun onCancel() {
         when (state) {
-            SELECTION -> destroy()
+            SELECTION -> back()
             ADJUST -> state = SELECTION
         }
     }

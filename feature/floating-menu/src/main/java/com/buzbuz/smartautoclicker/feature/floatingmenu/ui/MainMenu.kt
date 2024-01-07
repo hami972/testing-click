@@ -16,32 +16,39 @@
  */
 package com.buzbuz.smartautoclicker.feature.floatingmenu.ui
 
-import android.content.Context
+import android.content.DialogInterface
 import android.util.Size
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.View
 import android.view.WindowManager
 
+import androidx.appcompat.view.ContextThemeWrapper
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 
-import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenuController
+import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
+import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenu
+import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
 import com.buzbuz.smartautoclicker.feature.floatingmenu.R
 import com.buzbuz.smartautoclicker.feature.floatingmenu.databinding.OverlayMenuBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.scenario.ScenarioDialog
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.overlay.DebugModel
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.overlay.DebugOverlayView
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.report.DebugReportDialog
+import com.buzbuz.smartautoclicker.feature.tutorial.ui.TutorialActivity
+
+import com.google.android.material.color.DynamicColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * [OverlayMenuController] implementation for displaying the main menu overlay.
+ * [OverlayMenu] implementation for displaying the main menu overlay.
  *
  * This is the menu displayed once the service is started via the [com.buzbuz.smartautoclicker.activity.ScenarioActivity]
  * once the user has selected a scenario to be used. It allows the user to start the detection on the currently loaded
@@ -49,34 +56,29 @@ import kotlinx.coroutines.launch
  *
  * There is no overlay views attached to this overlay menu, meaning that the user will always be able to clicks on the
  * Activities displayed below it.
- *
- * @param context the Android Context for the overlay menu shown by this controller.
  */
-class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuController(context) {
+class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
 
     /** The view model for this menu. */
-    private val viewModel: MainMenuModel by lazy { ViewModelProvider(this).get(MainMenuModel::class.java) }
+    private val viewModel: MainMenuModel by viewModels()
     /** The view model for the debugging features. */
-    private val debuggingViewModel: DebugModel by lazy {
-        ViewModelProvider(this).get(DebugModel::class.java)
-    }
-
-    /** Animation from play to pause. */
-    private val playToPauseDrawable =
-        AnimatedVectorDrawableCompat.create(context, R.drawable.anim_play_pause)!!
-    /** Animation from pause to play. */
-    private val pauseToPlayDrawable =
-        AnimatedVectorDrawableCompat.create(context, R.drawable.anim_pause_play)!!
-
-    private var billingFlowTriggeredByDetectionLimitation: Boolean = false
-
-    /** The coroutine job for the observable used in debug mode. Null when not in debug mode. */
-    private var debugObservableJob: Job? = null
+    private val debuggingViewModel: DebugModel by viewModels()
 
     /** View binding for the content of the overlay. */
     private lateinit var viewBinding: OverlayMenuBinding
+    /** Animation from play to pause. */
+    private lateinit var playToPauseDrawable: AnimatedVectorDrawableCompat
+    /** Animation from pause to play. */
+    private lateinit var pauseToPlayDrawable: AnimatedVectorDrawableCompat
+
+    private var billingFlowTriggeredByDetectionLimitation: Boolean = false
+    /** The coroutine job for the observable used in debug mode. Null when not in debug mode. */
+    private var debugObservableJob: Job? = null
 
     override fun onCreateMenu(layoutInflater: LayoutInflater): ViewGroup {
+        playToPauseDrawable = AnimatedVectorDrawableCompat.create(context, R.drawable.anim_play_pause)!!
+        pauseToPlayDrawable = AnimatedVectorDrawableCompat.create(context, R.drawable.anim_pause_play)!!
+
         viewBinding = OverlayMenuBinding.inflate(layoutInflater)
         return viewBinding.root
     }
@@ -93,8 +95,6 @@ class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuCont
 
     override fun onCreate() {
         super.onCreate()
-
-        viewModel.setConfiguredScenario(scenarioId)
 
         // Ensure the debug view state is correct
         viewBinding.layoutDebug.visibility = View.GONE
@@ -124,6 +124,21 @@ class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuCont
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.monitorPlayPauseButtonView(viewBinding.btnPlay)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (viewModel.shouldShowFirstTimeTutorialDialog()) showFirstTimeTutorialDialog()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.stopViewMonitoring()
+    }
+
     override fun onMenuItemClicked(viewId: Int) {
         when (viewId) {
             R.id.btn_play -> {
@@ -132,8 +147,12 @@ class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuCont
                     hide()
                 }
             }
-            R.id.btn_click_list -> showScenarioConfigDialog()
-            R.id.btn_stop -> destroy()
+            R.id.btn_click_list -> {
+                viewModel.startScenarioEdition {
+                    showScenarioConfigDialog()
+                }
+            }
+            R.id.btn_stop -> onStopClicked()
         }
     }
 
@@ -184,16 +203,31 @@ class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuCont
         }
     }
 
-    private fun showScenarioConfigDialog() {
-        viewModel.startScenarioEdition()
-        showSubOverlay(
-            overlayController = ScenarioDialog(
-                context = context,
-                onConfigSaved = viewModel::saveScenarioChanges,
+    private fun showScenarioConfigDialog() =
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ScenarioDialog(
                 onConfigDiscarded = viewModel::cancelScenarioChanges,
+                onConfigSaved = { viewModel.saveScenarioChanges { success -> if (!success) showScenarioSaveErrorDialog() } },
             ),
             hideCurrent = true,
         )
+
+    private fun showScenarioSaveErrorDialog() {
+        MaterialAlertDialogBuilder(DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(context, R.style.AppTheme)))
+            .setTitle(R.string.dialog_overlay_title_warning)
+            .setMessage(R.string.message_scenario_saving_error)
+            .setPositiveButton(R.string.button_dialog_modify) { _: DialogInterface, _: Int ->
+                showScenarioConfigDialog()
+            }
+            .setNegativeButton(android.R.string.cancel) { _: DialogInterface, _: Int ->
+                viewModel.cancelScenarioChanges()
+            }
+            .create()
+            .apply {
+                window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY)
+            }
+            .show()
     }
 
     /**
@@ -244,7 +278,26 @@ class MainMenu(context: Context, private val scenarioId: Long) : OverlayMenuCont
     private fun showDebugReportDialog(reportReady: Boolean) {
         if (!reportReady) return
 
-        debuggingViewModel.consumeDebugReport()
-        showSubOverlay(DebugReportDialog(context))
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = DebugReportDialog(),
+        )
+    }
+
+    private fun showFirstTimeTutorialDialog() {
+        MaterialAlertDialogBuilder(DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(context, R.style.AppTheme)))
+            .setTitle(R.string.dialog_title_tutorial_first_time)
+            .setMessage(R.string.message_tutorial_first_time)
+            .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
+                context.startActivity(TutorialActivity.getStartIntent(context))
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .create()
+            .apply {
+                window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY)
+            }
+            .show()
+
+        viewModel.onFirstTimeTutorialDialogShown()
     }
 }

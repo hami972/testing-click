@@ -17,6 +17,7 @@
 package com.buzbuz.smartautoclicker.core.domain.model.endcondition
 
 import androidx.annotation.IntRange
+
 import com.buzbuz.smartautoclicker.core.domain.model.Identifier
 
 /**
@@ -31,7 +32,12 @@ import com.buzbuz.smartautoclicker.core.domain.model.Identifier
 data class EndCondition(
     val id: Identifier,
     val scenarioId: Identifier,
-    var eventId: Identifier? = null,
+    val eventId: Identifier? = null,
     val eventName: String? = null,
-    @IntRange(from = 1) var executions: Int = 1,
-)
+    @IntRange(from = 1) val executions: Int = 1,
+) {
+
+    /** @return true if this end condition is complete and can be transformed into its entity. */
+    fun isComplete(): Boolean =
+        eventId != null && eventName != null
+}

@@ -28,6 +28,8 @@ import com.buzbuz.smartautoclicker.feature.scenario.debugging.data.DebugEngine
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.getDebugConfigPreferences
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.getIsDebugReportEnabled
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.getIsDebugViewEnabled
+import com.buzbuz.smartautoclicker.feature.scenario.debugging.putIsDebugReportEnabled
+import com.buzbuz.smartautoclicker.feature.scenario.debugging.putIsDebugViewEnabled
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
@@ -73,43 +75,20 @@ class DebuggingRepository private constructor(context: Context) {
         .filter { it?.detectionResult?.isDetected ?: false }
 
     /** The listener upon scenario detection progress. Must be set at detection start in order to get debugging info. */
-    val detectionProgressListener: ProgressListener = object : ProgressListener {
-        override fun onSessionStarted(context: Context, scenario: Scenario, events: List<Event>) =
-            debugEngine.onSessionStarted(context, scenario, events)
+    val detectionProgressListener: ProgressListener = debugEngine
 
-        override fun onImageProcessingStarted() =
-            debugEngine.onImageProcessingStarted()
-
-        override fun onEventProcessingStarted(event: Event) =
-            debugEngine.onEventProcessingStarted(event)
-
-        override fun onConditionProcessingStarted(condition: Condition) =
-            debugEngine.onConditionProcessingStarted(condition)
-
-        override fun onConditionProcessingCompleted(detectionResult: DetectionResult) =
-            debugEngine.onConditionProcessingCompleted(detectionResult)
-
-        override suspend fun onEventProcessingCompleted(
-            isEventMatched: Boolean,
-            event: Event?,
-            condition: Condition?,
-            result: DetectionResult?,
-        ) = debugEngine.onEventProcessingCompleted(isEventMatched, event, condition, result)
-
-        override fun onImageProcessingCompleted() =
-            debugEngine.onImageProcessingCompleted()
-
-        override suspend fun onSessionEnded() =
-            debugEngine.onSessionEnded()
-
-        override fun cancelCurrentProcessing() =
-            debugEngine.cancelCurrentProcessing()
-    }
-
+    fun consumeDebugReport() = debugEngine.consumeDebugReport()
 
     fun isDebugViewEnabled(context: Context): Boolean =
         sharedPreferences.getIsDebugViewEnabled(context)
 
     fun isDebugReportEnabled(context: Context): Boolean =
         sharedPreferences.getIsDebugReportEnabled(context)
+
+    fun setDebuggingConfig(debugView: Boolean, debugReport: Boolean) =
+        sharedPreferences
+            .edit()
+            .putIsDebugViewEnabled(debugView)
+            .putIsDebugReportEnabled(debugReport)
+            .apply()
 }

@@ -16,7 +16,6 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.pause
 
-import android.content.Context
 import android.text.InputFilter
 import android.text.InputType
 import android.view.LayoutInflater
@@ -24,7 +23,6 @@ import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
@@ -32,9 +30,9 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
-import com.buzbuz.smartautoclicker.core.ui.utils.DurationInputFilter
-import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialogController
-import com.buzbuz.smartautoclicker.core.domain.model.action.Action
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
+import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
+import com.buzbuz.smartautoclicker.core.ui.utils.MinMaxInputFilter
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionPauseBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
@@ -44,28 +42,26 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.launch
 
 class PauseDialog(
-    context: Context,
-    private val editedPause: Action.Pause,
-    private val onDeleteClicked: (Action.Pause) -> Unit,
-    private val onConfirmClicked: (Action.Pause) -> Unit,
-) : OverlayDialogController(context, R.style.ScenarioConfigTheme) {
+    private val onConfirmClicked: () -> Unit,
+    private val onDeleteClicked: () -> Unit,
+    private val onDismissClicked: () -> Unit,
+) : OverlayDialog(R.style.ScenarioConfigTheme) {
 
     /** The view model for this dialog. */
-    private val viewModel: PauseViewModel by lazy {
-        ViewModelProvider(this).get(PauseViewModel::class.java)
-    }
+    private val viewModel: PauseViewModel by viewModels()
 
     /** ViewBinding containing the views for this dialog. */
     private lateinit var viewBinding: DialogConfigActionPauseBinding
 
     override fun onCreateView(): ViewGroup {
-        viewModel.setConfiguredPause(editedPause)
-
         viewBinding = DialogConfigActionPauseBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_pause)
 
-                buttonDismiss.setOnClickListener { destroy() }
+                buttonDismiss.setOnClickListener {
+                    onDismissClicked()
+                    back()
+                }
                 buttonSave.apply {
                     visibility = View.VISIBLE
                     setOnClickListener { onSaveButtonClicked() }
@@ -86,7 +82,7 @@ class PauseDialog(
             hideSoftInputOnFocusLoss(editNameLayout.textField)
 
             editPauseDurationLayout.apply {
-                textField.filters = arrayOf(DurationInputFilter())
+                textField.filters = arrayOf(MinMaxInputFilter(min = 1))
                 setLabel(R.string.input_field_label_pause_duration)
                 setOnTextChangedListener {
                     viewModel.setPauseDuration(if (it.isNotEmpty()) it.toString().toLong() else null)
@@ -112,13 +108,13 @@ class PauseDialog(
 
     private fun onSaveButtonClicked() {
         viewModel.saveLastConfig()
-        onConfirmClicked(viewModel.getConfiguredPause())
-        destroy()
+        onConfirmClicked()
+        back()
     }
 
     private fun onDeleteButtonClicked() {
-        onDeleteClicked(editedPause)
-        destroy()
+        onDeleteClicked()
+        back()
     }
 
     private fun updateClickName(newName: String?) {

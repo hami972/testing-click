@@ -74,24 +74,12 @@ class DebugModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-    private val _isDebugReportConsumed = MutableStateFlow(false)
-    /** True if the debug report have been consumed, false if not. */
-    private val isDebugReportConsumed: StateFlow<Boolean> = _isDebugReportConsumed
-
     /** True when a debug report is available. */
-    val isDebugReportReady: Flow<Boolean> = repository.debugReport
-        .combine(isDebugReportConsumed) { debugReport, consumed ->
-            if (debugReport == null) {
-                _isDebugReportConsumed.value = false
-                false
-            } else {
-                !consumed
-            }
-        }
-
-    /** Consume the current debug report. */
-    fun consumeDebugReport() {
-        _isDebugReportConsumed.value = true
+    val isDebugReportReady: Flow<Boolean> = repository.debugReport.map { report ->
+        if (report != null) {
+            delay(1000)
+            true
+        } else false
     }
 }
 

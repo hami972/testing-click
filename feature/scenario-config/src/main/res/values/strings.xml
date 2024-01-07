@@ -34,7 +34,6 @@
     <string name="dialog_overlay_title_scenario_config">Scenario</string>
     <string name="dialog_overlay_title_swipe">Swipe</string>
     <string name="dialog_overlay_title_toggle_event">Event state</string>
-    <string name="dialog_overlay_title_warning">Warning</string>
 
     <!--
       - Text for menu items.
@@ -46,7 +45,7 @@
     <string name="menu_item_title_simple">Simple</string>
     <string name="menu_item_title_events">Events</string>
     <string name="menu_item_title_config">Config</string>
-    <string name="menu_item_title_debug">Debug</string>
+    <string name="menu_item_title_more">More</string>
     <string name="menu_item_title_conditions">Conditions</string>
     <string name="menu_item_title_actions">Actions</string>
 
@@ -108,14 +107,15 @@
     <string name="message_event_copy_with_toggle_action_from_another_scenario">This event have one or more toggle event actions referencing an event from another scenario.\nYou will have to update their target events before saving your scenario.</string>
     <string name="message_event_delete_associated_end_condition">This event have one or more end conditions referencing it. Deleting this event will delete the associated end conditions as well.\nAre you sure ?</string>
     <string name="message_event_delete_associated_action">This event have one or more actions referencing it. Deleting this event will delete the associated actions as well.\nAre you sure ?</string>
+    <string name="message_tutorial_start">Learn how to use Smart AutoClicker</string>
 
     <!--
       - Toast messages.
       - Can be pretty long (2 lines).
       -->
-    <string name="toast_configure_single_click">Touch the position to click on.</string>
-    <string name="toast_configure_swipe_from">Touch the position to start the swipe from.</string>
-    <string name="toast_configure_swipe_to">Touch the position to end the swipe to.</string>
+    <string name="toast_configure_single_click">Touch the position to click on</string>
+    <string name="toast_configure_swipe_from">Touch the position to start the swipe from</string>
+    <string name="toast_configure_swipe_to">Touch the position to end the swipe to</string>
 
     <!--
       - Section titles.
@@ -127,6 +127,7 @@
     <string name="section_title_end_condition">End conditions</string>
     <string name="section_title_intent_extras_value">Value</string>
     <string name="section_title_start_application">Start application</string>
+    <string name="section_title_tutorial">Tutorial</string>
 
     <!--
       - List header.

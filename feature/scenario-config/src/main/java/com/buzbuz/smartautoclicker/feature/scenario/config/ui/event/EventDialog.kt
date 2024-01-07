@@ -16,24 +16,23 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.event
 
-import android.content.Context
 import android.content.DialogInterface
 import android.view.View
 import android.view.ViewGroup
 
 import androidx.annotation.StringRes
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonVisibility
 import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
+import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
-import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogController
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialog
+import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.NavigationRequest
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.actions.ActionsContent
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.conditions.ConditionsContent
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.config.EventConfigContent
@@ -44,24 +43,21 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 class EventDialog(
-    context: Context,
     private val onConfigComplete: () -> Unit,
     private val onDelete: () -> Unit,
     private val onDismiss: () -> Unit,
-): NavBarDialogController(context, R.style.ScenarioConfigTheme) {
+): NavBarDialog(R.style.ScenarioConfigTheme) {
 
     /** View model for this dialog. */
-    private val viewModel: EventDialogViewModel by lazy {
-        ViewModelProvider(this).get(EventDialogViewModel::class.java)
-    }
+    private val viewModel: EventDialogViewModel by viewModels()
 
     override val navigationMenuId: Int = R.menu.menu_event_config
 
     override fun onCreateView(): ViewGroup {
         return super.onCreateView().also {
             topBarBinding.apply {
-                setButtonVisibility(com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.SAVE, View.VISIBLE)
-                setButtonVisibility(com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.DELETE, View.VISIBLE)
+                setButtonVisibility(DialogNavigationButton.SAVE, View.VISIBLE)
+                setButtonVisibility(DialogNavigationButton.DELETE, View.VISIBLE)
                 dialogTitle.setText(R.string.dialog_overlay_title_event_config)
             }
         }
@@ -83,23 +79,22 @@ class EventDialog(
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.navItemsValidity.collect(::updateContentsValidity) }
                 launch { viewModel.eventCanBeSaved.collect(::updateSaveButton) }
-                launch { viewModel.subOverlayRequest.collect(::onNewSubOverlayRequest) }
             }
         }
     }
 
-    override fun onDialogButtonPressed(buttonType: com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton) {
+    override fun onDialogButtonPressed(buttonType: DialogNavigationButton) {
         when (buttonType) {
-            com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.SAVE -> onConfigComplete()
-            com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.DELETE -> {
+            DialogNavigationButton.SAVE -> onConfigComplete()
+            DialogNavigationButton.DELETE -> {
                 onDeleteButtonPressed()
                 return
             }
-            com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.DISMISS -> onDismiss()
+            DialogNavigationButton.DISMISS -> onDismiss()
             else -> {}
         }
 
-        destroy()
+        back()
     }
 
     private fun updateContentsValidity(itemsValidity: Map<Int, Boolean>) {
@@ -109,14 +104,7 @@ class EventDialog(
     }
 
     private fun updateSaveButton(enabled: Boolean) {
-        topBarBinding.setButtonEnabledState(com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.SAVE, enabled)
-    }
-
-    private fun onNewSubOverlayRequest(request: NavigationRequest?) {
-        if (request == null) return
-
-        showSubOverlay(request.overlay, request.hideCurrent)
-        viewModel.consumeRequest()
+        topBarBinding.setButtonEnabledState(DialogNavigationButton.SAVE, enabled)
     }
 
     /**
@@ -130,7 +118,7 @@ class EventDialog(
             showAssociatedActionsWarning()
         } else {
             onDelete()
-            destroy()
+            back()
         }
     }
 
@@ -144,7 +132,7 @@ class EventDialog(
                 showAssociatedActionsWarning()
             } else {
                 onDelete()
-                destroy()
+                back()
             }
         }
     }
@@ -156,7 +144,7 @@ class EventDialog(
     private fun showAssociatedActionsWarning() {
         showMessageDialog(R.string.dialog_overlay_title_warning, R.string.message_event_delete_associated_action) {
             onDelete()
-            destroy()
+            back()
         }
     }
 

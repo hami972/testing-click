@@ -24,6 +24,8 @@ import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelLazy
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -51,7 +53,7 @@ abstract class NavBarDialogContent(
     private lateinit var root: ViewGroup
 
     /** The owner of the dialog. */
-    protected lateinit var dialogController: NavBarDialogController
+    lateinit var dialogController: NavBarDialog
     /** The identifier of this content in the navigation bar. */
     protected var navBarId: Int = -1
         private set
@@ -67,7 +69,7 @@ abstract class NavBarDialogContent(
      * @param container the container view for this content.
      * @param identifier the identifier of this content in the parent navigation bar.
      */
-    fun create(controller: NavBarDialogController, container: ViewGroup, identifier: Int) {
+    fun create(controller: NavBarDialog, container: ViewGroup, identifier: Int) {
         if (lifecycleRegistry.currentState != Lifecycle.State.INITIALIZED) return
 
         navBarId = identifier
@@ -118,6 +120,7 @@ abstract class NavBarDialogContent(
     fun stop() {
         if (lifecycleRegistry.currentState != Lifecycle.State.STARTED) return
 
+        onStop()
         rootContainer.removeView(root)
 
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
@@ -143,6 +146,8 @@ abstract class NavBarDialogContent(
 
     protected open fun onStart() = Unit
 
+    protected open fun onStop() = Unit
+
     open fun onDialogButtonClicked(buttonType: com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton) = Unit
 
     protected open fun onCreateButtonClicked() = Unit
@@ -151,3 +156,19 @@ abstract class NavBarDialogContent(
 
     open fun createCopyButtonsAreAvailable(): Boolean = false
 }
+
+inline fun <reified VM : ViewModel> NavBarDialogContent.viewModels(): Lazy<VM> =
+    ViewModelLazy(
+        VM::class,
+        { viewModelStore },
+        { defaultViewModelProviderFactory },
+        { defaultViewModelCreationExtras },
+    )
+
+inline fun <reified VM : ViewModel> NavBarDialogContent.dialogViewModels(): Lazy<VM> =
+    ViewModelLazy(
+        VM::class,
+        { dialogController.viewModelStore },
+        { dialogController.defaultViewModelProviderFactory },
+        { defaultViewModelCreationExtras },
+    )

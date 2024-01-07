@@ -17,7 +17,6 @@
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.intent.extras
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -33,8 +32,7 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
 import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
-import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialogController
-import com.buzbuz.smartautoclicker.core.domain.model.action.IntentExtra
+import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionIntentExtraBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
@@ -46,21 +44,18 @@ import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 
 /**
- * [OverlayDialogController] implementation for displaying an intent extra and providing a button to delete it.
+ * [OverlayDialog] implementation for displaying an intent extra and providing a button to delete it.
  *
  * This dialog is generic for all extra value types. The UI will change according to the selected type.
  *
- * @param context the Android Context for the dialog shown by this controller.
- * @param extra the intent extra that will be edited.
  * @param onConfigComplete the listener called when the user presses the ok button.
  * @param onDeleteClicked the listener called when the user presses the delete button.
  */
 class ExtraConfigDialog(
-    context: Context,
-    private val extra: IntentExtra<out Any>,
-    private val onConfigComplete: (IntentExtra<out Any>) -> Unit,
-    private val onDeleteClicked: (() -> Unit)? = null,
-) : OverlayDialogController(context, R.style.ScenarioConfigTheme) {
+    private val onConfigComplete: () -> Unit,
+    private val onDeleteClicked: () -> Unit,
+    private val onDismissClicked: () -> Unit,
+) : OverlayDialog(R.style.ScenarioConfigTheme) {
 
     /** The view model for the data displayed in this dialog. */
     private val viewModel: ExtraConfigModel by lazy {
@@ -71,13 +66,14 @@ class ExtraConfigDialog(
     private lateinit var viewBinding: DialogConfigActionIntentExtraBinding
 
     override fun onCreateView(): ViewGroup {
-        viewModel.setConfigExtra(extra)
-
         viewBinding = DialogConfigActionIntentExtraBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_extra_config)
 
-                buttonDismiss.setOnClickListener { destroy() }
+                buttonDismiss.setOnClickListener {
+                    onDismissClicked()
+                    back()
+                }
                 buttonSave.apply {
                     visibility = View.VISIBLE
                     setOnClickListener { onSaveButtonClicked() }
@@ -124,13 +120,13 @@ class ExtraConfigDialog(
     }
 
     private fun onSaveButtonClicked() {
-        onConfigComplete(viewModel.getConfiguredExtra())
-        destroy()
+        onConfigComplete()
+        back()
     }
 
     private fun onDeleteButtonClicked() {
-        onDeleteClicked?.invoke()
-        destroy()
+        onDeleteClicked()
+        back()
     }
 
     private fun updateExtraKey(newKey: String?) {

@@ -27,12 +27,14 @@ import com.buzbuz.smartautoclicker.core.domain.model.action.Action.Click
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action.Pause
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action.Swipe
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action.ToggleEvent
+import com.buzbuz.smartautoclicker.core.domain.model.action.GESTURE_DURATION_MAX_VALUE
 import com.buzbuz.smartautoclicker.core.domain.model.action.putDomainExtra
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -89,7 +91,7 @@ internal class ActionExecutor(
             GestureDescription.StrokeDescription(
                 clickPath,
                 0,
-                if (randomize) random.getRandomizedDuration(click.pressDuration!!) else click.pressDuration!!,
+                if (randomize) random.getRandomizedGestureDuration(click.pressDuration!!) else click.pressDuration!!,
             )
         )
 
@@ -112,7 +114,7 @@ internal class ActionExecutor(
             GestureDescription.StrokeDescription(
                 swipePath,
                 0,
-                if (randomize) random.getRandomizedDuration(swipe.swipeDuration!!) else swipe.swipeDuration!!,
+                if (randomize) random.getRandomizedGestureDuration(swipe.swipeDuration!!) else swipe.swipeDuration!!,
             )
         )
 
@@ -177,13 +179,18 @@ internal class ActionExecutor(
     }
 
     private fun Random.getRandomizedPosition(position: Int): Float = nextInt(
-        position - RANDOMIZATION_POSITION_MAX_OFFSET_PX,
-        position + RANDOMIZATION_POSITION_MAX_OFFSET_PX + 1,
+        from = max(position - RANDOMIZATION_POSITION_MAX_OFFSET_PX, 0),
+        until = position + RANDOMIZATION_POSITION_MAX_OFFSET_PX + 1,
     ).toFloat()
 
     private fun Random.getRandomizedDuration(duration: Long): Long = nextLong(
-        max(duration - RANDOMIZATION_DURATION_MAX_OFFSET_MS, 1),
-        duration + RANDOMIZATION_DURATION_MAX_OFFSET_MS + 1,
+        from = max(duration - RANDOMIZATION_DURATION_MAX_OFFSET_MS, 1),
+        until = duration + RANDOMIZATION_DURATION_MAX_OFFSET_MS + 1,
+    )
+
+    private fun Random.getRandomizedGestureDuration(duration: Long): Long = nextLong(
+        from = max(duration - RANDOMIZATION_DURATION_MAX_OFFSET_MS, 1),
+        until = min(duration + RANDOMIZATION_DURATION_MAX_OFFSET_MS + 1, GESTURE_DURATION_MAX_VALUE),
     )
 }
 

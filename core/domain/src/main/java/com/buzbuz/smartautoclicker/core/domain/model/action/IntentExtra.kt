@@ -30,11 +30,14 @@ import com.buzbuz.smartautoclicker.core.domain.model.Identifier
  * @param value the value of the extra.
  */
 data class IntentExtra<T>(
-    var id: Identifier,
-    var actionId: Identifier,
-    var key: String?,
-    var value: T?,
+    val id: Identifier,
+    val actionId: Identifier,
+    val key: String?,
+    val value: T?,
 ) {
+
+    /** @return true if this extra is complete and can be transformed into its entity. */
+    fun isComplete(): Boolean = key != null && value != null
 
     /**
      * Copy and change the type of the value contained in this IntentExtra.

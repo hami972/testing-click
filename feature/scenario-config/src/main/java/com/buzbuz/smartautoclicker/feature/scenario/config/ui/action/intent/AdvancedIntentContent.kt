@@ -34,6 +34,7 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.domain.model.action.IntentExtra
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.ContentIntentConfigAdvancedBinding
@@ -57,7 +58,7 @@ class AdvancedIntentContent(appContext: Context) : NavBarDialogContent(appContex
     override fun onCreateView(container: ViewGroup): ViewGroup {
         extrasAdapter = ExtrasAdapter(
             addExtraClickedListener = { showExtraDialog(dialogViewModel.createNewExtra()) },
-            extraClickedListener = { extra, index ->  showExtraDialog(extra, index) },
+            extraClickedListener = { extra -> showExtraDialog(extra) },
         )
 
         viewBinding = ContentIntentConfigAdvancedBinding.inflate(LayoutInflater.from(context)).apply {
@@ -141,15 +142,15 @@ class AdvancedIntentContent(appContext: Context) : NavBarDialogContent(appContex
         viewBinding.editComponentNameLayout.setText(componentName)
     }
 
-    private fun showExtraDialog(extra: IntentExtra<out Any>, index: Int = -1) {
-        dialogController.showSubOverlay(
-            overlayController = ExtraConfigDialog(
-                context = context,
-                extra = extra,
-                onConfigComplete = { configuredExtra ->
-                    dialogViewModel.addUpdateExtra(configuredExtra, index)
-                },
-                onDeleteClicked = { if (index != -1) dialogViewModel.deleteExtra(index) }
+    private fun showExtraDialog(extra: IntentExtra<out Any>) {
+        dialogViewModel.startIntentExtraEdition(extra)
+
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = ExtraConfigDialog(
+                onConfigComplete = dialogViewModel::saveIntentExtraEdition,
+                onDeleteClicked = dialogViewModel::deleteIntentExtraEvent,
+                onDismissClicked = dialogViewModel::dismissIntentExtraEvent,
             ),
             hideCurrent = false,
         )
