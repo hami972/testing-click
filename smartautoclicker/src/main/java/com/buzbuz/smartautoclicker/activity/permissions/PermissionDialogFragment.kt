@@ -76,7 +76,7 @@ class PermissionDialogFragment : DialogFragment() {
 
         viewBinding = DialogPermissionBinding.inflate(layoutInflater).apply {
             titlePermission.setText(permissionArgument.titleRes)
-            descPermission.setText(permissionArgument.descriptionRes)
+
 
             buttonRequestPermission.setOnClickListener {
                 permissionArgument.startRequestFlow(requireContext())

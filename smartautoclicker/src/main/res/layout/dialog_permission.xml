@@ -27,15 +27,15 @@
         style="@style/AppTheme.TextAppearance.TopBarTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginVertical="@dimen/margin_vertical_extra_large"
         android:layout_marginHorizontal="@dimen/margin_horizontal_default"
+        android:layout_marginVertical="@dimen/margin_vertical_extra_large"
         android:gravity="center"
-        app:layout_constraintVertical_chainStyle="packed"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toTopOf="@id/divider_top"
-        tools:text="@string/dialog_title_permission_accessibility"/>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed"
+        tools:text="@string/dialog_title_permission_accessibility" />
 
     <com.google.android.material.divider.MaterialDivider
         android:id="@+id/divider_top"
@@ -45,22 +45,9 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/title_permission"
-        app:layout_constraintBottom_toTopOf="@id/desc_permission"/>
+        />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/desc_permission"
-        style="@style/AppTheme.TextAppearance.ListItemSubText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/margin_vertical_default"
-        android:layout_marginBottom="@dimen/margin_vertical_large"
-        android:layout_marginHorizontal="@dimen/margin_horizontal_default"
-        android:gravity="center"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/divider_top"
-        app:layout_constraintBottom_toTopOf="@id/button_request_permission"
-        tools:text="@string/message_permission_desc_accessibility"/>
+
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/button_request_permission"
@@ -72,7 +59,7 @@
         android:layout_marginBottom="@dimen/margin_vertical_default"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/desc_permission"
+        app:layout_constraintTop_toBottomOf="@id/divider_top"
         app:layout_constraintBottom_toTopOf="@id/button_deny_permission"
         android:text="@string/button_request_permission"/>
 
