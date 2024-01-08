@@ -21,7 +21,7 @@ import android.graphics.Rect
 import com.buzbuz.smartautoclicker.core.domain.model.AND
 import com.buzbuz.smartautoclicker.core.domain.model.ConditionOperator
 import com.buzbuz.smartautoclicker.core.domain.model.DetectionType
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
 import com.buzbuz.smartautoclicker.core.domain.model.event.Event
@@ -37,8 +37,8 @@ internal object ProcessingData {
         conditions: List<Condition> = emptyList(),
         enableOnStart: Boolean = true,
     ) = Event(
-        id = Identifier(id),
-        scenarioId = Identifier(1L),
+        id = Identifier(databaseId = id),
+        scenarioId = Identifier(databaseId = 1L),
         name = "TOTO",
         conditionOperator = operator,
         priority = 0,
@@ -55,8 +55,8 @@ internal object ProcessingData {
         @DetectionType detectionType: Int,
         shouldBeDetected: Boolean = true,
     ) = Condition(
-        Identifier(1L),
-        Identifier(1L),
+        Identifier(databaseId = 1L),
+        Identifier(databaseId = 1L),
         "TOTO",
         path,
         area,

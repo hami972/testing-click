@@ -18,6 +18,7 @@ package com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.actions
 
 import android.content.Context
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
@@ -71,6 +72,7 @@ class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
         actionAdapter = ActionAdapter(
             actionClickedListener = ::onActionClicked,
             actionReorderListener = viewModel::updateActionOrder,
+            itemViewBound = ::onActionItemBound,
         )
 
         viewBinding = IncludeLoadableListBinding.inflate(LayoutInflater.from(context), container, false).apply {
@@ -120,50 +122,66 @@ class ActionsContent(appContext: Context) : NavBarDialogContent(appContext) {
 
     override fun onStop() {
         super.onStop()
-        viewModel.stopViewMonitoring()
+        viewModel.stopAllViewMonitoring()
     }
 
     override fun onCreateButtonClicked() {
-        val dialog = ActionTypeSelectionDialog(
-            choices = viewModel.actionCreationItems.value,
-            onChoiceSelectedListener = { choiceClicked ->
-                if (!choiceClicked.enabled) {
-                    actionTypeSelectionDialog?.show()
-                    viewModel.onProModeUnsubscribedActionClicked(context, choiceClicked)
-                } else {
-                    actionTypeSelectionDialog = null
-                    showActionConfigDialog(viewModel.createAction(context, choiceClicked))
-                }
-            },
-            onCancelledListener = { actionTypeSelectionDialog = null }
-        )
-        actionTypeSelectionDialog = dialog
+        debounceUserInteraction {
+            val dialog = ActionTypeSelectionDialog(
+                choices = viewModel.actionCreationItems.value,
+                onChoiceSelectedListener = { choiceClicked ->
+                    if (!choiceClicked.enabled) {
+                        actionTypeSelectionDialog?.show()
+                        viewModel.onProModeUnsubscribedActionClicked(context, choiceClicked)
+                    } else {
+                        actionTypeSelectionDialog = null
+                        showActionConfigDialog(viewModel.createAction(context, choiceClicked))
+                    }
+                },
+                onCancelledListener = { actionTypeSelectionDialog = null }
+            )
+            actionTypeSelectionDialog = dialog
 
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = dialog,
-        )
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = dialog,
+            )
+        }
     }
 
-    override fun onCopyButtonClicked() =
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = ActionCopyDialog(
-                onActionSelected = { newCopyAction ->
-                    showActionConfigDialog(viewModel.createNewActionFrom(newCopyAction))
-                }
-            ),
-        )
+    override fun onCopyButtonClicked() {
+        debounceUserInteraction {
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = ActionCopyDialog(
+                    onActionSelected = { newCopyAction ->
+                        showActionConfigDialog(viewModel.createNewActionFrom(newCopyAction))
+                    }
+                ),
+            )
+        }
+    }
 
     private fun onCreateCopyClickedWhileLimited() {
-        actionLimitReachedClick = true
+        debounceUserInteraction {
+            actionLimitReachedClick = true
 
-        dialogController.hide()
-        viewModel.onActionCountReachedAddCopyClicked(context)
+            dialogController.hide()
+            viewModel.onActionCountReachedAddCopyClicked(context)
+        }
     }
 
     private fun onActionClicked(action: Action) {
-        showActionConfigDialog(action)
+        debounceUserInteraction {
+            showActionConfigDialog(action)
+        }
+    }
+
+    private fun onActionItemBound(index: Int, itemView: View?) {
+        if (index != 0) return
+
+        if (itemView != null) viewModel.monitorFirstActionView(itemView)
+        else viewModel.stopFirstActionViewMonitoring()
     }
 
     private fun updateActionLimitationVisibility(isVisible: Boolean) {

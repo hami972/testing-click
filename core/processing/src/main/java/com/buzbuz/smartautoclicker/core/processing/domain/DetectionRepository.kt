@@ -19,11 +19,10 @@ package com.buzbuz.smartautoclicker.core.processing.domain
 import android.content.Context
 import android.content.Intent
 
+import com.buzbuz.smartautoclicker.core.base.AndroidExecutor
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.Repository
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
-import com.buzbuz.smartautoclicker.core.processing.data.AndroidExecutor
 import com.buzbuz.smartautoclicker.core.processing.data.DetectorEngine
-import com.buzbuz.smartautoclicker.core.processing.data.DetectorState
 import com.buzbuz.smartautoclicker.core.processing.data.processor.ProgressListener
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -81,9 +80,10 @@ class DetectionRepository private constructor(context: Context) {
     val canStartDetection: Flow<Boolean> = scenarioId
         .filterNotNull()
         .combine(detectionState) { id, state ->
-            if (state == DetectionState.INACTIVE)  return@combine false
+            if (state == DetectionState.INACTIVE || state == DetectionState.ERROR_NO_NATIVE_LIB)
+                return@combine false
 
-            scenarioRepository.getCompleteEventList(id.databaseId).forEach {
+            scenarioRepository.getEvents(id.databaseId).forEach {
                 event -> if (event.enabledOnStart) return@combine true
             }
             false
@@ -109,7 +109,7 @@ class DetectionRepository private constructor(context: Context) {
     suspend fun startDetection(context: Context, progressListener: ProgressListener) {
         val id = scenarioId.value?.databaseId ?: return
         val scenario = scenarioRepository.getScenario(id) ?: return
-        val events = scenarioRepository.getCompleteEventList(id)
+        val events = scenarioRepository.getEvents(id)
         val endCondition = scenarioRepository.getEndConditions(id)
 
         detectorEngine.value?.startDetection(
@@ -134,12 +134,9 @@ class DetectionRepository private constructor(context: Context) {
         detectorEngine.value = null
         _scenarioId.value = null
     }
-
-    private fun DetectorState.toDetectionState(): DetectionState? = when (this) {
-        DetectorState.CREATED -> DetectionState.INACTIVE
-        DetectorState.RECORDING -> DetectionState.RECORDING
-        DetectorState.DETECTING -> DetectionState.DETECTING
-        DetectorState.DESTROYED -> DetectionState.INACTIVE
-        DetectorState.TRANSITIONING -> null // Return null to avoid notifying state change when transitioning
-    }
 }
+
+/** The maximum detection quality for the algorithm. */
+const val DETECTION_QUALITY_MAX = com.buzbuz.smartautoclicker.core.detection.DETECTION_QUALITY_MAX
+/** The minimum detection quality for the algorithm. */
+const val DETECTION_QUALITY_MIN = com.buzbuz.smartautoclicker.core.detection.DETECTION_QUALITY_MIN

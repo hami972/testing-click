@@ -20,9 +20,9 @@ import com.buzbuz.smartautoclicker.core.domain.model.endcondition.EndCondition
 import com.buzbuz.smartautoclicker.core.domain.model.event.Event
 import com.buzbuz.smartautoclicker.core.domain.model.scenario.Scenario
 import com.buzbuz.smartautoclicker.feature.scenario.config.data.base.ListEditor
-import com.buzbuz.smartautoclicker.feature.scenario.config.domain.EditedElementState
-import kotlinx.coroutines.flow.Flow
+import com.buzbuz.smartautoclicker.feature.scenario.config.domain.model.EditedElementState
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.combine
 internal class ScenarioEditor {
 
     private val referenceScenario: MutableStateFlow<Scenario?> = MutableStateFlow(null)
-    private val _editedScenario: MutableStateFlow<Scenario?> = MutableStateFlow((null))
+    private val _editedScenario: MutableStateFlow<Scenario?> = MutableStateFlow(null)
 
     val editedScenario: StateFlow<Scenario?> = _editedScenario
     val editedScenarioState: Flow<EditedElementState<Scenario>> = combine(referenceScenario, _editedScenario) { ref, edit ->
@@ -38,13 +38,15 @@ internal class ScenarioEditor {
             if (ref == null || edit == null) false
             else ref != edit
 
-        EditedElementState(edit, hasChanged, true)
+        val canBeSaved = edit != null && edit.name.isNotEmpty()
+
+        EditedElementState(edit, hasChanged, canBeSaved)
     }
 
-    val eventsEditor = EventsEditor(::deleteAllReferencesToEvent)
-    val endConditionsEditor = object : ListEditor<EndCondition>(canBeEmpty = true) {
+    val eventsEditor = EventsEditor(::deleteAllReferencesToEvent, editedScenario)
+    val endConditionsEditor = object : ListEditor<EndCondition, Scenario>(canBeEmpty = true, parentItem = editedScenario) {
         override fun areItemsTheSame(a: EndCondition, b: EndCondition): Boolean = a.id == b.id
-        override fun isItemComplete(item: EndCondition): Boolean = item.isComplete()
+        override fun isItemComplete(item: EndCondition, parent: Scenario?): Boolean = item.isComplete()
     }
 
     fun startEdition(scenario: Scenario, events: List<Event>, endConditions: List<EndCondition>) {

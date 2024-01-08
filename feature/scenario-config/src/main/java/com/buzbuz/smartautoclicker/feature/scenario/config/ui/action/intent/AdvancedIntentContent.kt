@@ -27,19 +27,19 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
-import com.buzbuz.smartautoclicker.core.ui.bindings.DropdownItem
-import com.buzbuz.smartautoclicker.core.ui.bindings.setItems
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.DropdownItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setItems
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
-import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setSelectedItem
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.domain.model.action.IntentExtra
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.ContentIntentConfigAdvancedBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.intent.extras.ExtraConfigDialog
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
 
 import kotlinx.coroutines.launch
 
@@ -57,8 +57,8 @@ class AdvancedIntentContent(appContext: Context) : NavBarDialogContent(appContex
 
     override fun onCreateView(container: ViewGroup): ViewGroup {
         extrasAdapter = ExtrasAdapter(
-            addExtraClickedListener = { showExtraDialog(dialogViewModel.createNewExtra()) },
-            extraClickedListener = { extra -> showExtraDialog(extra) },
+            addExtraClickedListener = { debounceUserInteraction { showExtraDialog(dialogViewModel.createNewExtra()) } },
+            extraClickedListener = { extra -> debounceUserInteraction { showExtraDialog(extra) } },
         )
 
         viewBinding = ContentIntentConfigAdvancedBinding.inflate(LayoutInflater.from(context)).apply {

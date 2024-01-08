@@ -16,23 +16,43 @@
  */
 package com.buzbuz.smartautoclicker.feature.tutorial.data
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 
 import com.buzbuz.smartautoclicker.feature.tutorial.data.game.TutorialGameData
 import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewType
 
 internal data class TutorialData(
-    @StringRes val nameResId: Int,
-    @StringRes val descResId: Int,
+    val info: TutorialInfo,
     val game: TutorialGameData,
     val steps: List<TutorialStepData>,
 )
 
-internal data class TutorialStepData(
-    @StringRes val contentTextResId: Int,
-    val hideFloatingUi: Boolean,
-    val stepStartCondition: StepStartCondition,
-    val stepEndCondition: StepEndCondition,
+internal data class TutorialInfo(
+    @StringRes val nameResId: Int,
+    @StringRes val descResId: Int,
+)
+
+internal sealed class TutorialStepData {
+
+    abstract val stepStartCondition: StepStartCondition
+
+    internal data class ChangeFloatingUiVisibility(
+        override val stepStartCondition: StepStartCondition,
+        val isVisible: Boolean,
+    ) : TutorialStepData()
+
+    internal data class TutorialOverlay(
+        @StringRes val contentTextResId: Int,
+        val image: TutorialStepImage? = null,
+        override val stepStartCondition: StepStartCondition,
+        val stepEndCondition: StepEndCondition,
+    ) : TutorialStepData()
+}
+
+internal data class TutorialStepImage(
+    @DrawableRes val imageResId: Int,
+    @StringRes val imageDescResId: Int,
 )
 
 internal sealed class StepStartCondition {

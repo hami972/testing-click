@@ -25,9 +25,10 @@ import android.graphics.Rect
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+
 import androidx.core.graphics.toRectF
-import com.buzbuz.smartautoclicker.core.center
-import com.buzbuz.smartautoclicker.core.scale
+import com.buzbuz.smartautoclicker.core.base.extensions.center
+import com.buzbuz.smartautoclicker.core.base.extensions.scale
 
 import com.buzbuz.smartautoclicker.feature.tutorial.R
 
@@ -72,9 +73,12 @@ class TutorialFullscreenView @JvmOverloads constructor(
         }
     }
 
+    // SDK 34 defines MotionEvents as NonNull. But previous bad experiences with the same case on
+    // SDK 33 gave me trust issues
+    @Suppress("NOTHING_TO_OVERRIDE", "ACCIDENTAL_OVERRIDE")
     override fun onDraw(canvas: Canvas?) {
-        super.onDraw(canvas)
         canvas ?: return
+        super.onDraw(canvas)
 
         canvas.drawPath(drawPath, backgroundPaint)
     }

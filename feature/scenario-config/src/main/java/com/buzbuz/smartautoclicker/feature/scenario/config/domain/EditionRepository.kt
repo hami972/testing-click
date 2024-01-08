@@ -62,11 +62,30 @@ class EditionRepository private constructor(context: Context) {
     private val scenarioEditor: ScenarioEditor = ScenarioEditor()
 
     /** Provides creators for all elements in an edited scenario. */
-    val editedItemsBuilder: EditedItemsBuilder = EditedItemsBuilder(scenarioEditor)
+    val editedItemsBuilder: EditedItemsBuilder = EditedItemsBuilder(context, scenarioEditor)
     /** Provides the states of all elements in the edited scenario. */
-    val editionState: EditionState = EditionState(scenarioEditor)
+    val editionState: EditionState = EditionState(context, scenarioEditor)
     /** Tells if the editions made on the scenario are synchronized with the database values. */
     val isEditionSynchronized: Flow<Boolean> = scenarioEditor.editedScenario.map { it == null }
+
+    /** Tells if the user is currently editing a scenario. */
+    val isEditingScenario: Flow<Boolean> = scenarioEditor.editedScenario
+        .map { it?.id != null }
+    /** Tells if the user is currently editing an event. */
+    val isEditingEvent: Flow<Boolean> = scenarioEditor.eventsEditor.editedItem
+        .map { it?.id != null }
+    /** Tells if the user is currently editing a condition. */
+    val isEditingCondition: Flow<Boolean> = scenarioEditor.eventsEditor.conditionsEditor.editedItem
+        .map { it?.id != null }
+    /** Tells if the user is currently editing an action. */
+    val isEditingAction: Flow<Boolean> = scenarioEditor.eventsEditor.actionsEditor.editedItem
+        .map { it?.id != null }
+    /** Tells if the user is currently editing an end condition. */
+    val isEditingEndCondition: Flow<Boolean> = scenarioEditor.endConditionsEditor.editedItem
+        .map { it?.id != null }
+    /** Tells if the user is currently editing an Intent Extra. */
+    val isEditingIntentExtra: Flow<Boolean> = scenarioEditor.eventsEditor.actionsEditor.intentExtraEditor.editedItem
+        .map { it?.id != null }
 
     // --- SCENARIO - START ---
 
@@ -76,6 +95,8 @@ class EditionRepository private constructor(context: Context) {
             Log.e(TAG, "Can't start edition, scenario $scenarioId not found")
             return false
         }
+
+        Log.d(TAG, "Start edition of scenario $scenarioId")
 
         scenarioEditor.startEdition(
             scenario = scenario,
@@ -87,6 +108,8 @@ class EditionRepository private constructor(context: Context) {
 
     /** Save editions changes in the database. */
     suspend fun saveEditions(): Boolean {
+        Log.d(TAG, "Save editions")
+
         val updateResult = repository.updateScenario(
             scenario = scenarioEditor.editedScenario.value ?: return false,
             events = scenarioEditor.eventsEditor.editedList.value ?: return false,
@@ -191,7 +214,10 @@ class EditionRepository private constructor(context: Context) {
     // --- END CONDITION - END ---
 
     /** Cancel all changes made during the edition. */
-    fun stopEdition(): Unit = scenarioEditor.stopEdition()
+    fun stopEdition() {
+        Log.d(TAG, "Stop edition")
+        scenarioEditor.stopEdition()
+    }
 
     // --- SCENARIO - END ---
 }

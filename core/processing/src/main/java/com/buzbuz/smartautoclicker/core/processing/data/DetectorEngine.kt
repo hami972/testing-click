@@ -23,7 +23,8 @@ import android.media.Image
 import android.media.projection.MediaProjectionManager
 import android.util.Log
 
-import com.buzbuz.smartautoclicker.core.display.ScreenRecorder
+import com.buzbuz.smartautoclicker.core.base.AndroidExecutor
+import com.buzbuz.smartautoclicker.core.display.DisplayRecorder
 import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
 import com.buzbuz.smartautoclicker.core.detection.ImageDetector
 import com.buzbuz.smartautoclicker.core.detection.NativeDetector
@@ -61,8 +62,8 @@ internal class DetectorEngine(context: Context) {
     /** Listener upon orientation changes. */
     private val orientationListener = ::onOrientationChanged
 
-    /** Record the screen and provide images via [ScreenRecorder.acquireLatestImage]. */
-    private val screenRecorder = ScreenRecorder.getInstance()
+    /** Record the screen and provide images via [DisplayRecorder.acquireLatestBitmap]. */
+    private val displayRecorder = DisplayRecorder.getInstance()
     /** Process the events conditions to detect them on the screen. */
     private var scenarioProcessor: ScenarioProcessor? = null
     /** Detect the condition images on the screen image. */
@@ -109,7 +110,7 @@ internal class DetectorEngine(context: Context) {
         context: Context,
         resultCode: Int,
         data: Intent,
-        androidExecutor: AndroidExecutor
+        androidExecutor: AndroidExecutor,
     ) {
         if (_state.value != DetectorState.CREATED) {
             Log.w(TAG, "startScreenRecord: Screen record is already started")
@@ -124,7 +125,7 @@ internal class DetectorEngine(context: Context) {
         displayMetrics.addOrientationListener(orientationListener)
 
         processingScope?.launch {
-            screenRecorder.apply {
+            displayRecorder.apply {
                 startProjection(context, resultCode, data) {
                     this@DetectorEngine.stopScreenRecord()
                 }
@@ -154,27 +155,36 @@ internal class DetectorEngine(context: Context) {
         bitmapSupplier: suspend (String, Int, Int) -> Bitmap?,
         progressListener: ProgressListener? = null,
     ) {
-        if (_state.value != DetectorState.RECORDING) {
+        val executor = androidExecutor
+        if (_state.value != DetectorState.RECORDING || executor == null) {
             Log.w(TAG, "startDetection: Screen record is not started.")
             return
         }
+
+        val detector = NativeDetector.newInstance()
+        if (detector == null) {
+            Log.e(TAG, "startDetection: native library not found.")
+            _state.value = DetectorState.ERROR_NATIVE_DETECTOR_LIB_NOT_FOUND
+            return
+        }
+
         _state.value = DetectorState.TRANSITIONING
 
         Log.i(TAG, "startDetection")
 
         processingScope?.launchProcessingJob {
-            imageDetector = NativeDetector()
+            imageDetector = detector
 
             detectionProgressListener = progressListener
             progressListener?.onSessionStarted(context, scenario, events)
 
             scenarioProcessor = ScenarioProcessor(
-                imageDetector = imageDetector!!,
+                imageDetector = detector,
                 detectionQuality = scenario.detectionQuality,
                 randomize = scenario.randomize,
                 events = events,
                 bitmapSupplier = bitmapSupplier,
-                androidExecutor = androidExecutor!!,
+                androidExecutor = executor,
                 endConditionOperator = scenario.endConditionOperator,
                 endConditions =  endConditions,
                 onStopRequested = { stopDetection() },
@@ -199,9 +209,9 @@ internal class DetectorEngine(context: Context) {
                 processingJob?.cancelAndJoin()
             }
 
-            screenRecorder.stopScreenRecord()
+            displayRecorder.stopScreenRecord()
             detectionProgressListener?.cancelCurrentProcessing()
-            screenRecorder.startScreenRecord(context, displayMetrics.screenSize)
+            displayRecorder.startScreenRecord(context, displayMetrics.screenSize)
 
             if (_state.value == DetectorState.DETECTING) {
                 processingScope?.launchProcessingJob {
@@ -264,7 +274,8 @@ internal class DetectorEngine(context: Context) {
         processingScope?.launch {
             processingShutdownJob?.join()
 
-            screenRecorder.stopProjection()
+            displayRecorder.stopProjection()
+            androidExecutor = null
             _state.emit(DetectorState.CREATED)
 
             processingScope?.cancel()
@@ -272,14 +283,14 @@ internal class DetectorEngine(context: Context) {
         }
     }
 
-    /** Process the latest images provided by the [ScreenRecorder]. */
+    /** Process the latest images provided by the [DisplayRecorder]. */
     private suspend fun processScreenImages() {
         _state.emit(DetectorState.DETECTING)
 
         scenarioProcessor?.invalidateScreenMetrics()
         while (processingJob?.isActive == true) {
-            screenRecorder.acquireLatestImage()?.use { image ->
-                scenarioProcessor?.process(image)
+            displayRecorder.acquireLatestBitmap()?.let { screenFrame ->
+                scenarioProcessor?.process(screenFrame)
             } ?: delay(NO_IMAGE_DELAY_MS)
         }
     }
@@ -292,7 +303,7 @@ internal class DetectorEngine(context: Context) {
         }
 
         Log.i(TAG, "clear")
-        androidExecutor = null
+
 
         _state.value != DetectorState.DESTROYED
     }
@@ -330,6 +341,8 @@ internal enum class DetectorState {
     DETECTING,
     /** The engine is destroyed and can no longer be used. */
     DESTROYED,
+    /** The native lib can't be loaded and the detection can't be used. */
+    ERROR_NATIVE_DETECTOR_LIB_NOT_FOUND,
 }
 
 /**

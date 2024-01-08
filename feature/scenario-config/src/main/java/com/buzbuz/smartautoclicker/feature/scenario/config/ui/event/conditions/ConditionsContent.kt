@@ -18,6 +18,7 @@ package com.buzbuz.smartautoclicker.feature.scenario.config.ui.event.conditions
 
 import android.content.Context
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
@@ -60,6 +61,7 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
         conditionsAdapter = ConditionAdapter(
             conditionClickedListener = ::onConditionClicked,
             bitmapProvider = viewModel::getConditionBitmap,
+            itemViewBound = ::onConditionItemBound,
         )
 
         viewBinding = IncludeLoadableListBinding.inflate(LayoutInflater.from(context), container, false).apply {
@@ -110,39 +112,56 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
 
     override fun onStop() {
         super.onStop()
-        viewModel.stopViewMonitoring()
+        viewModel.stopAllViewMonitoring()
     }
 
-    override fun onCreateButtonClicked() =
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = ConditionSelectorMenu(
-                onConditionSelected = { area, bitmap ->
-                    showConditionConfigDialog(viewModel.createCondition(context, area, bitmap))
-                }
-            ),
-            hideCurrent = true,
-        )
+    override fun onCreateButtonClicked() {
+        debounceUserInteraction {
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = ConditionSelectorMenu(
+                    onConditionSelected = { area, bitmap ->
+                        showConditionConfigDialog(viewModel.createCondition(context, area, bitmap))
+                    }
+                ),
+                hideCurrent = true,
+            )
+        }
+    }
 
-    override fun onCopyButtonClicked() =
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = ConditionCopyDialog(
-                onConditionSelected = { conditionSelected ->
-                    showConditionConfigDialog(viewModel.createNewConditionFromCopy(conditionSelected))
-                },
-            ),
-        )
+    override fun onCopyButtonClicked() {
+        debounceUserInteraction {
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = ConditionCopyDialog(
+                    onConditionSelected = { conditionSelected ->
+                        showConditionConfigDialog(viewModel.createNewConditionFromCopy(conditionSelected))
+                    },
+                ),
+            )
+        }
+    }
 
     private fun onCreateCopyClickedWhileLimited() {
-        conditionLimitReachedClick = true
+        debounceUserInteraction {
+            conditionLimitReachedClick = true
 
-        dialogController.hide()
-        viewModel.onConditionCountReachedAddCopyClicked(context)
+            dialogController.hide()
+            viewModel.onConditionCountReachedAddCopyClicked(context)
+        }
     }
 
     private fun onConditionClicked(condition: Condition) {
-        showConditionConfigDialog(condition)
+        debounceUserInteraction {
+            showConditionConfigDialog(condition)
+        }
+    }
+
+    private fun onConditionItemBound(index: Int, itemView: View?) {
+        if (index != 0) return
+
+        if (itemView != null) viewModel.monitorFirstConditionView(itemView)
+        else viewModel.stopFirstConditionViewMonitoring()
     }
 
     private fun updateConditionLimitationVisibility(isVisible: Boolean) {
@@ -176,10 +195,11 @@ class ConditionsContent(appContext: Context) : NavBarDialogContent(appContext) {
         OverlayManager.getInstance(context).navigateTo(
             context = context,
             newOverlay = ConditionDialog(
-                onConfirmClicked = viewModel::upsertEditedCondition,
-                onDeleteClicked = viewModel::removeEditedCondition,
-                onDismissClicked = viewModel::dismissEditedCondition
+                onConfirmClickedListener = viewModel::upsertEditedCondition,
+                onDeleteClickedListener = viewModel::removeEditedCondition,
+                onDismissClickedListener = viewModel::dismissEditedCondition
             ),
+            hideCurrent = true,
         )
     }
 }

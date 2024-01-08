@@ -23,15 +23,15 @@ import androidx.annotation.DrawableRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 
-import com.buzbuz.smartautoclicker.core.ui.bindings.DropdownItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.DropdownItem
 import com.buzbuz.smartautoclicker.feature.billing.IBillingRepository
 import com.buzbuz.smartautoclicker.feature.billing.ProModeAdvantage
 import com.buzbuz.smartautoclicker.feature.scenario.config.domain.EditionRepository
 import com.buzbuz.smartautoclicker.core.domain.model.AND
 import com.buzbuz.smartautoclicker.core.domain.model.OR
 import com.buzbuz.smartautoclicker.core.domain.model.endcondition.EndCondition
-import com.buzbuz.smartautoclicker.core.domain.model.scenario.DETECTION_QUALITY_MAX
-import com.buzbuz.smartautoclicker.core.domain.model.scenario.DETECTION_QUALITY_MIN
+import com.buzbuz.smartautoclicker.core.processing.domain.DETECTION_QUALITY_MAX
+import com.buzbuz.smartautoclicker.core.processing.domain.DETECTION_QUALITY_MIN
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 
 import kotlinx.coroutines.flow.combine
@@ -61,7 +61,7 @@ class ScenarioConfigViewModel(application: Application) : AndroidViewModel(appli
         .mapNotNull { it.value }
 
     /** The event name value currently edited by the user. */
-    val scenarioName: Flow<String> =  configuredScenario
+    val scenarioName: Flow<String> = configuredScenario
         .map { it.name }
         .filterNotNull()
         .take(1)
@@ -170,7 +170,7 @@ class ScenarioConfigViewModel(application: Application) : AndroidViewModel(appli
             viewModelScope.launch {
                 editionRepository.updateEditedScenario(
                     scenario.copy(
-                        detectionQuality = max(scenario.detectionQuality - 1, DETECTION_QUALITY_MIN)
+                        detectionQuality = max(scenario.detectionQuality - 1, DETECTION_QUALITY_MIN.toInt())
                     )
                 )
             }
@@ -183,7 +183,7 @@ class ScenarioConfigViewModel(application: Application) : AndroidViewModel(appli
             viewModelScope.launch {
                 editionRepository.updateEditedScenario(
                     scenario.copy(
-                        detectionQuality = min(scenario.detectionQuality + 1, DETECTION_QUALITY_MAX)
+                        detectionQuality = min(scenario.detectionQuality + 1, DETECTION_QUALITY_MAX.toInt())
                     )
                 )
             }

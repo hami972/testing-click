@@ -48,7 +48,7 @@ class DebugModel(application: Application) : AndroidViewModel(application) {
     /** The coordinates of the last positive detection. */
     val debugLastPositiveCoordinates: Flow<Rect> = repository.lastResult
         .map { debugInfo ->
-            if (debugInfo != null && debugInfo.detectionResult.isDetected) debugInfo.conditionArea
+            if (debugInfo != null && debugInfo.isDetected) debugInfo.conditionArea
             else Rect()
         }
 
@@ -65,7 +65,7 @@ class DebugModel(application: Application) : AndroidViewModel(application) {
                     LastPositiveDebugInfo(
                         debugInfo.event.name,
                         debugInfo.condition.name,
-                        debugInfo.detectionResult.confidenceRate.formatConfidenceRate(),
+                        debugInfo.confidenceRate.formatConfidenceRate(),
                     )
                 )
 
@@ -73,14 +73,6 @@ class DebugModel(application: Application) : AndroidViewModel(application) {
                 emit(LastPositiveDebugInfo())
             }
         }
-
-    /** True when a debug report is available. */
-    val isDebugReportReady: Flow<Boolean> = repository.debugReport.map { report ->
-        if (report != null) {
-            delay(1000)
-            true
-        } else false
-    }
 }
 
 /**

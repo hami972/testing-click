@@ -30,6 +30,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 
+import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
+
 abstract class NavBarDialogContent(
     appContext: Context,
 ) : LifecycleOwner, ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
@@ -140,6 +142,12 @@ abstract class NavBarDialogContent(
         viewModelStore.clear()
     }
 
+    protected fun debounceUserInteraction(userInteraction: () -> Unit) {
+        if (lifecycleRegistry.currentState == Lifecycle.State.RESUMED) {
+            dialogController.debounceInteraction(userInteraction)
+        }
+    }
+
     protected abstract fun onCreateView(container: ViewGroup): ViewGroup
 
     protected abstract fun onViewCreated()
@@ -148,7 +156,7 @@ abstract class NavBarDialogContent(
 
     protected open fun onStop() = Unit
 
-    open fun onDialogButtonClicked(buttonType: com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton) = Unit
+    open fun onDialogButtonClicked(buttonType: DialogNavigationButton) = Unit
 
     protected open fun onCreateButtonClicked() = Unit
 

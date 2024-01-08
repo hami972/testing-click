@@ -19,6 +19,7 @@ package com.buzbuz.smartautoclicker.core.ui.overlays.manager
 import android.content.Context
 import android.graphics.Point
 import android.util.Log
+import android.view.KeyEvent
 
 import androidx.lifecycle.Lifecycle
 
@@ -28,7 +29,7 @@ import com.buzbuz.smartautoclicker.core.ui.overlays.Overlay
 import com.buzbuz.smartautoclicker.core.ui.overlays.FullscreenOverlay
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.navigation.OverlayNavigationRequest
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.navigation.OverlayNavigationRequestStack
-import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenu
+import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenuPositionDataSource
 import com.buzbuz.smartautoclicker.core.ui.utils.internal.LifoStack
 
 import kotlinx.coroutines.flow.Flow
@@ -67,6 +68,8 @@ class OverlayManager internal constructor(context: Context) {
 
     /** The metrics of the device screen. */
     private val displayMetrics = DisplayMetrics.getInstance(context)
+    /** Save/load and lock the position of the overlay menus. */
+    private val menuPositionDataSource = OverlayMenuPositionDataSource.getInstance(context)
     /** The listener upon screen rotation. */
     private val orientationListener: (Context) -> Unit = { onOrientationChanged() }
 
@@ -82,15 +85,10 @@ class OverlayManager internal constructor(context: Context) {
 
     /** Tells if we are currently executing navigation requests. */
     private var isNavigating: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    /** Tells if we are currently closing the children a of dismissed overlay. */
-    private var closingChildren: Boolean = false
     /** The overlay at the top of the stack (the top visible one). Null if the stack is empty. */
     private var topOverlay: Overlay? = null
-    /**
-     * When defined with [lockMenuPosition], all [OverlayMenu] will be displayed at this position with the move button
-     * removed. Use [unlockMenuPosition] to restore the user position and allow menu moving.
-     */
-    private var menuLockedPosition: Point? = null
+    /** Notifies the caller of [navigateUpToRoot] once the all overlays above the root are destroyed. */
+    private var navigateUpToRootCompletionListener: (() -> Unit)? = null
 
     /** Flow on the top of the overlay stack. Null if the stack is empty. */
     val backStackTop: Flow<Overlay?> = isNavigating
@@ -124,12 +122,44 @@ class OverlayManager internal constructor(context: Context) {
         return true
     }
 
+    /** Destroys all overlays in the backstack except the root one. */
+    fun navigateUpToRoot(context: Context, completionListener: () -> Unit) {
+        if (overlayBackStack.size <= 1) {
+            completionListener()
+            return
+        }
+
+        navigateUpToRootCompletionListener = completionListener
+        val navigateUpCount = overlayBackStack.size - 1
+        Log.d(TAG, "Navigating to root, pushing $navigateUpCount NavigateUp requests, currently navigating: ${isNavigating.value}")
+
+        repeat(overlayBackStack.size - 1) {
+            overlayNavigationRequestStack.push(OverlayNavigationRequest.NavigateUp)
+        }
+        if (!isNavigating.value) executeNextNavigationRequest(context)
+    }
+
     /** Destroys all overlays on the back stack. */
     fun closeAll(context: Context) {
-        Log.d(TAG, "Pushing CloseAll request, currently navigating: ${isNavigating.value}")
+        if (topOverlay == null && overlayBackStack.isEmpty()) return
 
-        overlayNavigationRequestStack.push(OverlayNavigationRequest.CloseAll)
+        Log.d(TAG, "Close all overlays (${overlayBackStack.size}, currently navigating: ${isNavigating.value}")
+
+        overlayNavigationRequestStack.clear()
+        topOverlay?.destroy()
+        repeat(overlayBackStack.size) {
+            overlayNavigationRequestStack.push(OverlayNavigationRequest.NavigateUp)
+        }
         if (!isNavigating.value) executeNextNavigationRequest(context)
+    }
+
+    /** Propagate the provided touch event to the focused overlay, if any. */
+    fun propagateKeyEvent(event: KeyEvent): Boolean {
+        Log.d(TAG, "Propagating key event $event")
+
+        return topOverlay?.handleKeyEvent(event)
+            ?: overlayBackStack.top?.handleKeyEvent(event)
+            ?: false
     }
 
     /**
@@ -137,7 +167,8 @@ class OverlayManager internal constructor(context: Context) {
      * Their lifecycles will be saved, and can be restored using [restoreVisibility].
      */
     fun hideAll() {
-        if (lifecyclesRegistry.haveStates()) return
+        if (isStackHidden()) return
+
         Log.d(TAG, "Hide all overlays from the stack")
 
         // Save the overlays states to restore them when restoreAll is called
@@ -151,6 +182,8 @@ class OverlayManager internal constructor(context: Context) {
      * The states must have been saved using [hideAll].
      */
     fun restoreVisibility() {
+        if (!isStackHidden()) return
+
         val overlayStates = lifecyclesRegistry.restoreStates()
         if (overlayBackStack.isEmpty() || overlayStates.isEmpty()) return
 
@@ -170,6 +203,13 @@ class OverlayManager internal constructor(context: Context) {
             } ?: Log.w(TAG, "State for overlay ${overlay.hashCode()} not found, can't restore state")
         }
     }
+
+    /** @return true if the overlay stack has been hidden via [hideAll], false if not. */
+    private fun isStackHidden(): Boolean =
+        lifecyclesRegistry.haveStates()
+
+    fun isOverlayStackVisible(): Boolean =
+        getBackStackTop()?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) ?: false
 
     /**
      * Set an overlay as being shown above all overlays in the backstack.
@@ -201,20 +241,12 @@ class OverlayManager internal constructor(context: Context) {
 
     fun lockMenuPosition(position: Point) {
         Log.d(TAG, "Locking menu position to $position")
-        menuLockedPosition = position
-
-        overlayBackStack.forEach { overlay ->
-            if (overlay is OverlayMenu) overlay.lockPosition(position)
-        }
+        menuPositionDataSource.lockPosition(position)
     }
 
     fun unlockMenuPosition() {
         Log.d(TAG, "Unlocking menu position")
-        menuLockedPosition = null
-
-        overlayBackStack.forEach { overlay ->
-            if (overlay is OverlayMenu) overlay.unlockPosition()
-        }
+        menuPositionDataSource.unlockPosition()
     }
 
     private fun executeNextNavigationRequest(context: Context) {
@@ -225,17 +257,8 @@ class OverlayManager internal constructor(context: Context) {
 
         when (request) {
             is OverlayNavigationRequest.NavigateTo -> executeNavigateTo(context, request)
-            is OverlayNavigationRequest.NavigateUp -> executeNavigateUp()
-            is OverlayNavigationRequest.CloseAll -> executeCloseAll()
-            null -> {
-                // If there is no more navigation requests, set the top overlay as current
-                if (overlayBackStack.isNotEmpty()) {
-                    Log.d(TAG, "No more pending request, resume stack top overlay")
-                    overlayBackStack.peek().resume()
-                }
-
-                isNavigating.value = false
-            }
+            OverlayNavigationRequest.NavigateUp -> executeNavigateUp()
+            null -> onNavigationCompleted()
         }
     }
 
@@ -255,10 +278,6 @@ class OverlayManager internal constructor(context: Context) {
             appContext = context,
             dismissListener = ::onOverlayDismissed,
         )
-        // Lock this new overlay position if its a menu and if the lock has been requested
-        menuLockedPosition?.let {
-            if (request.overlay is OverlayMenu) request.overlay.lockPosition(it)
-        }
 
         // Update current lifecycle
         currentOverlay?.apply {
@@ -282,39 +301,13 @@ class OverlayManager internal constructor(context: Context) {
         }
     }
 
-    private fun executeCloseAll() {
-        topOverlay?.destroy()
-
-        if (overlayBackStack.isEmpty()) {
-            isNavigating.value = false
-            return
-        }
-        overlayBackStack.bottom?.destroy()
-    }
-
     private fun onOverlayDismissed(context: Context, overlay: Overlay) {
         Log.d(TAG, "Overlay dismissed ${overlay.hashCode()}")
 
         isNavigating.value = true
 
-        val dismissedIndex = overlayBackStack.indexOf(overlay)
-
-        // First, close all overlays over the dismissed one, from top to bottom.
-        if (dismissedIndex != overlayBackStack.size - 1) {
-            Log.d(TAG, "Overlay dismissed isn't at the top of stack, dismissing all children...")
-
-            closingChildren = true
-            while (dismissedIndex != overlayBackStack.size - 1) executeNavigateUp()
-            closingChildren = false
-
-            Log.d(TAG, "Children all dismissed.")
-        }
-
-        // Remove the dismissed overlay from the stack now that we are sure that all children are also destroyed.
+        // Remove the dismissed overlay from the stack now that we are sure it is destroyed.
         overlayBackStack.pop()
-
-        // Skip if we are currently in the children close loop
-        if (closingChildren) return
 
         // If there is no more overlays, no need to keep track of the orientation
         if (overlayBackStack.isEmpty()) {
@@ -324,8 +317,26 @@ class OverlayManager internal constructor(context: Context) {
         executeNextNavigationRequest(context)
     }
 
+    private fun onNavigationCompleted() {
+        // If there is no more navigation requests, resume the top overlay
+        if (overlayBackStack.isNotEmpty()) {
+            // If the overlay stack was requested hidden, do nothing
+            if (!isStackHidden()) {
+                Log.d(TAG, "No more pending request, resume stack top overlay")
+                overlayBackStack.peek().resume()
+            } else {
+                Log.d(TAG, "No more pending request, but stack is hidden, delaying resume...")
+            }
+
+            navigateUpToRootCompletionListener?.invoke()
+            navigateUpToRootCompletionListener = null
+        }
+
+        isNavigating.value = false
+    }
+
     private fun onOrientationChanged() {
-        overlayBackStack.forEachReversed { (it as BaseOverlay).changeOrientation() }
+        overlayBackStack.forEachReversed { it.changeOrientation() }
     }
 
     fun dump(writer: PrintWriter, prefix: String) {

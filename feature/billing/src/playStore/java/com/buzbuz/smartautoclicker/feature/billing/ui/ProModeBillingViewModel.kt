@@ -65,7 +65,7 @@ internal class ProModeBillingViewModel(application: Application) : AndroidViewMo
         DialogState.Connecting,
     )
 
-    fun setBillingReason(reason: ProModeAdvantage) {
+    fun setBillingReason(reason: ProModeAdvantage?) {
         proModeFeature.value = reason
     }
 
@@ -80,7 +80,7 @@ internal class ProModeBillingViewModel(application: Application) : AndroidViewMo
 
 internal sealed class DialogState {
     internal data class NotPurchased(
-        val billingReasonText: String,
+        val billingReasonText: String?,
         val acceptButtonText: String,
     ): DialogState()
 
@@ -90,10 +90,11 @@ internal sealed class DialogState {
 }
 
 
-private fun ProModeAdvantage.toDisplayString(context: Context): String =
+private fun ProModeAdvantage?.toDisplayString(context: Context): String? =
     when (this) {
         is ProModeAdvantage.Feature -> this.toDisplayString(context)
         is ProModeAdvantage.Limitation -> this.toDisplayString(context)
+        null -> null
         else -> throw UnsupportedOperationException("Can't get the string res value for this ProModeAdvantage")
     }
 
@@ -104,7 +105,6 @@ private fun ProModeAdvantage.Feature.toDisplayString(context: Context): String =
             ProModeAdvantage.Feature.ACTION_TYPE_TOGGLE_EVENT -> R.string.billing_reason_action_type_toggle_event
             ProModeAdvantage.Feature.BACKUP_EXPORT -> R.string.billing_reason_backup_export
             ProModeAdvantage.Feature.BACKUP_IMPORT -> R.string.billing_reason_backup_import
-            ProModeAdvantage.Feature.CONDITION_THRESHOLD -> R.string.billing_reason_condition_threshold
             ProModeAdvantage.Feature.EVENT_STATE -> R.string.billing_reason_event_state
             ProModeAdvantage.Feature.SCENARIO_ANTI_DETECTION -> R.string.billing_reason_scenario_anti_detection
             ProModeAdvantage.Feature.SCENARIO_DETECTION_QUALITY -> R.string.billing_reason_scenario_detection_quality
@@ -120,7 +120,7 @@ private fun ProModeAdvantage.Limitation.toDisplayString(context: Context): Strin
             ProModeAdvantage.Limitation.CONDITION_COUNT_LIMIT -> R.string.billing_reason_condition_count
             ProModeAdvantage.Limitation.DETECTION_DURATION_MINUTES_LIMIT -> R.string.billing_reason_detection_duration_limit
             ProModeAdvantage.Limitation.EVENT_COUNT_LIMIT -> R.string.billing_reason_event_count
-            ProModeAdvantage.Limitation.SCENARIO_COUNT_LIMIT -> R.string.billing_reason_scenario_count
+            ProModeAdvantage.Limitation.SMART_SCENARIO_COUNT_LIMIT -> R.string.billing_reason_scenario_count
         },
         limit,
     )

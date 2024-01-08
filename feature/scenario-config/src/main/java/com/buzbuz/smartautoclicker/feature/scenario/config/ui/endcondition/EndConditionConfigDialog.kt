@@ -17,6 +17,7 @@
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.endcondition
 
 import android.text.InputType
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,13 +32,13 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.utils.MinMaxInputFilter
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
 import com.buzbuz.smartautoclicker.core.domain.model.event.Event
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigEndConditionBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.bindings.EventPickerViewState
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.bindings.updateState
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
@@ -66,8 +67,10 @@ class EndConditionConfigDialog(
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_end_condition_config)
                 buttonDismiss.setOnClickListener {
-                    onDismissClicked()
-                    back()
+                    debounceUserInteraction {
+                        onDismissClicked()
+                        back()
+                    }
                 }
 
                 buttonDelete.apply {
@@ -97,6 +100,11 @@ class EndConditionConfigDialog(
 
     override fun onDialogCreated(dialog: BottomSheetDialog) {
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingEndCondition.collect(::onEndConditionEditingStateChanged) }
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.eventViewState.collect(::updateEvent) }
                 launch { viewModel.executionCountError.collect(viewBinding.editExecutionCountLayout::setError) }
@@ -111,8 +119,10 @@ class EndConditionConfigDialog(
      * Propagate the configured event to the provided listener and dismiss the dialog.
      */
     private fun onSaveButtonClicked() {
-        onConfirmClicked()
-        back()
+        debounceUserInteraction {
+            onConfirmClicked()
+            back()
+        }
     }
 
     /**
@@ -120,8 +130,10 @@ class EndConditionConfigDialog(
      * Propagate the configured event to the provided listener and dismiss the dialog.
      */
     private fun onDeleteButtonClicked() {
-        onDeleteClicked()
-        back()
+        debounceUserInteraction {
+            onDeleteClicked()
+            back()
+        }
     }
 
     /** Update the enabled state of the save button. */
@@ -149,7 +161,15 @@ class EndConditionConfigDialog(
             ),
         )
     }
+
+    private fun onEndConditionEditingStateChanged(isEditingCondition: Boolean) {
+        if (!isEditingCondition) {
+            Log.e(TAG, "Closing EndConditionConfigDialog because there is no condition edited")
+            finish()
+        }
+    }
 }
 
 private const val MIN_EXECUTION_COUNT = 0
 private const val MAX_EXECUTION_COUNT = 9999
+private const val TAG = "EndConditionConfigDialog"

@@ -46,14 +46,14 @@ class EventSelectionDialog(
     private lateinit var viewBinding: DialogBaseSelectionBinding
 
     /** Adapter for the list of events. */
-    private val eventsAdapter = EndConditionEventsAdapter(::onEventSelected)
+    private val eventsAdapter = EventsAdapter(::onEventSelected)
 
     override fun onCreateView(): ViewGroup {
         viewBinding = DialogBaseSelectionBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
                 dialogTitle.setText(R.string.dialog_overlay_title_event_selection)
                 buttonSave.visibility = View.GONE
-                buttonDismiss.setOnClickListener { back() }
+                buttonDismiss.setOnClickListener { debounceUserInteraction { back() } }
             }
         }
 
@@ -80,8 +80,10 @@ class EventSelectionDialog(
      * @param event the selected event.
      */
     private fun onEventSelected(event: Event) {
-        onEventClicked(event)
-        back()
+        debounceUserInteraction {
+            onEventClicked(event)
+            back()
+        }
     }
 }
 
@@ -89,22 +91,22 @@ class EventSelectionDialog(
  * Adapter for the list of events.
  * @param onEventSelected listener on user click on an event.
  */
-private class EndConditionEventsAdapter(
+private class EventsAdapter(
     private val onEventSelected: (Event) -> Unit,
-) : ListAdapter<Event, EndConditionEventViewHolder>(EndConditionEventDiffUtilCallback) {
+) : ListAdapter<Event, EventViewHolder>(EventsDiffUtilCallback) {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EndConditionEventViewHolder =
-        EndConditionEventViewHolder(
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EventViewHolder =
+        EventViewHolder(
             ItemEventBinding.inflate(LayoutInflater.from(parent.context), parent, false),
             onEventSelected,
         )
 
-    override fun onBindViewHolder(holder: EndConditionEventViewHolder, position: Int) =
+    override fun onBindViewHolder(holder: EventViewHolder, position: Int) =
         holder.onBind(getItem(position))
 }
 
-/** DiffUtil Callback comparing two EndConditionListItem when updating the [EndConditionEventsAdapter] list. */
-private object EndConditionEventDiffUtilCallback: DiffUtil.ItemCallback<Event>() {
+/** DiffUtil Callback comparing two EndConditionListItem when updating the [EventsAdapter] list. */
+private object EventsDiffUtilCallback: DiffUtil.ItemCallback<Event>() {
     override fun areItemsTheSame(oldItem: Event, newItem: Event): Boolean = oldItem.id == newItem.id
     override fun areContentsTheSame(oldItem: Event, newItem: Event): Boolean = oldItem == newItem
 }
@@ -115,7 +117,7 @@ private object EndConditionEventDiffUtilCallback: DiffUtil.ItemCallback<Event>()
  * @param viewBinding the view binding for this view holder views.
  * @param onEventSelected called when the user select an event.
  */
-private class EndConditionEventViewHolder(
+private class EventViewHolder(
     private val viewBinding: ItemEventBinding,
     private val onEventSelected: (Event) -> Unit,
 ): RecyclerView.ViewHolder(viewBinding.root) {

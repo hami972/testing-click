@@ -29,26 +29,19 @@ import kotlinx.coroutines.flow.map
 class TutorialListViewModel(application: Application) : AndroidViewModel(application) {
 
     private val tutorialRepository: TutorialRepository = TutorialRepository.getTutorialRepository(application)
-    private val overlayManager: OverlayManager = OverlayManager.getInstance(application)
 
     val items: Flow<List<TutorialItem>> = tutorialRepository.tutorials
         .map { tutorials ->
-            tutorials.mapIndexed { index, tutorial ->
-                tutorial.toItem(index)
-            }
+            tutorials
+                .filter { it.isUnlocked }
+                .mapIndexed { index, tutorial -> tutorial.toItem(index) }
         }
-
-    fun setOverlayVisibility(visible: Boolean) {
-        if (visible) overlayManager.restoreVisibility()
-        else overlayManager.hideAll()
-    }
 
     private fun Tutorial.toItem(index: Int): TutorialItem =
         TutorialItem(
             nameResId = nameResId,
             descResId = descResId,
             index = index,
-            isEnabled = isUnlocked,
         )
 }
 
@@ -56,5 +49,4 @@ data class TutorialItem(
     val nameResId: Int,
     val descResId: Int,
     val index: Int,
-    val isEnabled: Boolean,
 )

@@ -24,30 +24,25 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.DialogChoice
+import com.buzbuz.smartautoclicker.core.domain.model.action.Action
+import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewsManager
+import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewType
 import com.buzbuz.smartautoclicker.feature.billing.IBillingRepository
 import com.buzbuz.smartautoclicker.feature.billing.ProModeAdvantage
-import com.buzbuz.smartautoclicker.core.domain.Repository
-import com.buzbuz.smartautoclicker.core.domain.model.action.Action
-import com.buzbuz.smartautoclicker.core.mapList
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.domain.EditionRepository
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.bindings.ActionDetails
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.bindings.toActionDetails
-import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewsManager
-import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewType
 
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 
 class ActionsViewModel(application: Application) : AndroidViewModel(application) {
 
-    /** The repository of the application. */
-    private val repository: Repository = Repository.getRepository(application)
     /** Maintains the currently configured scenario state. */
     private val editionRepository = EditionRepository.getInstance(application)
     /** The repository for the pro mode billing. */
@@ -57,32 +52,30 @@ class ActionsViewModel(application: Application) : AndroidViewModel(application)
 
     /** Currently configured actions. */
     private val configuredActions = editionRepository.editionState.editedEventActionsState
-        .mapNotNull { it.value }
 
     /** Tells if the limitation in action count have been reached. */
     val isActionLimitReached: Flow<Boolean> = billingRepository.isProModePurchased
         .combine(configuredActions) { isProModePurchased, actions ->
-            !isProModePurchased && (actions.size >= ProModeAdvantage.Limitation.ACTION_COUNT_LIMIT.limit)
+            !isProModePurchased && ((actions.value?.size ?: 0) >= ProModeAdvantage.Limitation.ACTION_COUNT_LIMIT.limit)
         }
 
     /** Tells if there is at least one action to copy. */
     val canCopyAction: Flow<Boolean> = combine(
-        repository.getAllActions(),
-        configuredActions,
-        editionRepository.editionState.eventsState,
-    ) { dbActions, editedActions, scenarioEvents ->
-        if (dbActions.isNotEmpty()) return@combine true
-        if (editedActions.isNotEmpty()) return@combine true
-
-        scenarioEvents.value?.forEach { event ->
-            if (event.actions.isNotEmpty()) return@combine true
-        }
-        false
+        editionRepository.editionState.editedEventState,
+        editionRepository.editionState.editedScenarioOtherActionsForCopy,
+        editionRepository.editionState.allOtherScenarioActionsForCopy,
+    ) { eventState, scenarioActions, allActions ->
+        val event = eventState.value ?: return@combine false
+        event.actions.isNotEmpty() || scenarioActions.isNotEmpty() || allActions.isNotEmpty()
     }
 
     /** List of action details. */
     val actionDetails: Flow<List<Pair<Action, ActionDetails>>> = configuredActions
-        .mapList { action -> action to action.toActionDetails(application) }
+        .map { actions ->
+            actions.value?.mapIndexed { index, action ->
+                action to action.toActionDetails(application, !actions.itemValidity[index])
+            } ?: emptyList()
+        }
     /** Type of actions to be displayed in the new action creation dialog. */
     val actionCreationItems: StateFlow<List<ActionTypeChoice>> = billingRepository.isProModePurchased
         .map { isProModePurchased ->
@@ -157,8 +150,17 @@ class ActionsViewModel(application: Application) : AndroidViewModel(application)
         monitoredViewsManager.attach(MonitoredViewType.EVENT_DIALOG_BUTTON_CREATE_ACTION, view)
     }
 
-    fun stopViewMonitoring() {
+    fun monitorFirstActionView(view: View) {
+        monitoredViewsManager.attach(MonitoredViewType.EVENT_DIALOG_ITEM_FIRST_ACTION, view)
+    }
+
+    fun stopFirstActionViewMonitoring() {
+        monitoredViewsManager.detach(MonitoredViewType.EVENT_DIALOG_ITEM_FIRST_ACTION)
+    }
+
+    fun stopAllViewMonitoring() {
         monitoredViewsManager.detach(MonitoredViewType.EVENT_DIALOG_BUTTON_CREATE_ACTION)
+        monitoredViewsManager.detach(MonitoredViewType.EVENT_DIALOG_ITEM_FIRST_ACTION)
     }
 }
 

@@ -16,6 +16,7 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.scenario
 
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 
@@ -66,6 +67,11 @@ class ScenarioDialog(
         super.onDialogCreated(dialog)
 
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingScenario.collect(::onScenarioEditingStateChanged) }
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.navItemsValidity.collect(::updateContentsValidity) }
                 launch { viewModel.scenarioCanBeSaved.collect(::updateSaveButtonState) }
@@ -75,7 +81,10 @@ class ScenarioDialog(
 
     override fun onResume() {
         super.onResume()
-        viewModel.monitorCreateEventView(createCopyButtons.buttonNew)
+        viewModel.apply {
+            monitorSaveButtonView(topBarBinding.buttonSave)
+            monitorCreateEventView(createCopyButtons.buttonNew)
+        }
     }
 
     override fun onPause() {
@@ -84,13 +93,18 @@ class ScenarioDialog(
     }
 
     override fun onDialogButtonPressed(buttonType: DialogNavigationButton) {
-        when (buttonType) {
-            DialogNavigationButton.SAVE -> onConfigSaved()
-            DialogNavigationButton.DISMISS -> onConfigDiscarded()
-            else -> { /* Nothing to do */ }
+        if (buttonType == DialogNavigationButton.SAVE) {
+            onConfigSaved()
+            super.back()
+            return
         }
 
         back()
+    }
+
+    override fun back() {
+        onConfigDiscarded()
+        super.back()
     }
 
     private fun updateContentsValidity(itemsValidity: Map<Int, Boolean>) {
@@ -99,8 +113,16 @@ class ScenarioDialog(
         }
     }
 
-    /** */
     private fun updateSaveButtonState(isEnabled: Boolean) {
         topBarBinding.setButtonEnabledState(DialogNavigationButton.SAVE, isEnabled)
     }
+
+    private fun onScenarioEditingStateChanged(isEditingScenario: Boolean) {
+        if (!isEditingScenario) {
+            Log.e(TAG, "Closing ScenarioDialog because there is no scenario edited")
+            finish()
+        }
+    }
 }
+
+private const val TAG = "ScenarioDialog"

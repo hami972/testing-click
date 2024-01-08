@@ -25,7 +25,6 @@ interface ProModeAdvantage {
         ACTION_TYPE_TOGGLE_EVENT,
         BACKUP_EXPORT,
         BACKUP_IMPORT,
-        CONDITION_THRESHOLD,
         EVENT_STATE,
         SCENARIO_ANTI_DETECTION,
         SCENARIO_DETECTION_QUALITY,
@@ -36,8 +35,8 @@ interface ProModeAdvantage {
     enum class Limitation(val limit: Int) : ProModeAdvantage {
         ACTION_COUNT_LIMIT(5),
         CONDITION_COUNT_LIMIT(2),
-        DETECTION_DURATION_MINUTES_LIMIT(10),
+        DETECTION_DURATION_MINUTES_LIMIT(20),
         EVENT_COUNT_LIMIT(10),
-        SCENARIO_COUNT_LIMIT(2),
+        SMART_SCENARIO_COUNT_LIMIT(2),
     }
 }

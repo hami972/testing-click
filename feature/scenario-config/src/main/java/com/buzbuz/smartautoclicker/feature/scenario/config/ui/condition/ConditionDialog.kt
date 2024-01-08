@@ -16,9 +16,11 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.condition
 
+import android.content.DialogInterface
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.text.InputFilter
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -27,30 +29,34 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
 
-import com.buzbuz.smartautoclicker.core.ui.bindings.DropdownItem
-import com.buzbuz.smartautoclicker.core.ui.bindings.setItems
+import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
+import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.DropdownItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setItems
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
-import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setSelectorState
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigConditionBinding
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 class ConditionDialog(
-    private val onConfirmClicked: () -> Unit,
-    private val onDeleteClicked: () -> Unit,
-    private val onDismissClicked: () -> Unit,
+    private val onConfirmClickedListener: () -> Unit,
+    private val onDeleteClickedListener: () -> Unit,
+    private val onDismissClickedListener: () -> Unit,
 ) : OverlayDialog(R.style.ScenarioConfigTheme) {
 
     /** The view model for this dialog. */
@@ -65,22 +71,23 @@ class ConditionDialog(
                 dialogTitle.setText(R.string.dialog_overlay_title_condition_config)
 
                 buttonDismiss.setOnClickListener {
-                    onDismissClicked()
-                    back()
+                    debounceUserInteraction {
+                        onDismissClickedListener()
+                        back()
+                    }
                 }
                 buttonSave.apply {
                     visibility = View.VISIBLE
                     setOnClickListener {
-                        onConfirmClicked()
-                        back()
+                        debounceUserInteraction {
+                            onConfirmClickedListener()
+                            back()
+                        }
                     }
                 }
                 buttonDelete.apply {
                     visibility = View.VISIBLE
-                    setOnClickListener {
-                        onDeleteClicked()
-                        back()
-                    }
+                    setOnClickListener { debounceUserInteraction { onDeleteClicked() } }
                 }
             }
 
@@ -97,6 +104,8 @@ class ConditionDialog(
                 label = context.getString(R.string.dropdown_label_condition_detection_type),
                 items = viewModel.detectionTypeItems,
                 onItemSelected = viewModel::setDetectionType,
+                onItemBound = ::onDetectionTypeDropdownItemBound,
+                onSelectorClicked = ::showDetectionAreaSelector,
             )
 
             conditionShouldAppear.setItems(
@@ -118,6 +127,11 @@ class ConditionDialog(
 
     override fun onDialogCreated(dialog: BottomSheetDialog) {
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingCondition.collect(::onConditionEditingStateChanged) }
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.name.collect(::updateConditionName) }
                 launch { viewModel.nameError.collect(viewBinding.editNameLayout::setError) }
@@ -127,6 +141,29 @@ class ConditionDialog(
                 launch { viewModel.threshold.collect(::updateThreshold) }
                 launch { viewModel.conditionCanBeSaved.collect(::updateSaveButton) }
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.monitorSaveButtonView(viewBinding.layoutTopBar.buttonSave)
+        viewModel.monitorDetectionTypeDropdownView(viewBinding.conditionDetectionType.textLayout)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.stopViewMonitoring()
+    }
+
+    private fun onDeleteClicked() {
+        if (viewModel.isConditionRelatedToClick()) showAssociatedActionWarning()
+        else confirmDelete()
+    }
+
+    private fun onDetectionTypeDropdownItemBound(item: DropdownItem, view: View?) {
+        if (item == viewModel.detectionTypeScreen) {
+            if (view != null) viewModel.monitorDropdownItemWholeScreenView(view)
+            else viewModel.stopDropdownItemWholeScreenViewMonitoring()
         }
     }
 
@@ -150,8 +187,11 @@ class ConditionDialog(
         viewBinding.conditionShouldAppear.setSelectedItem(newValue)
     }
 
-    private fun updateConditionType(newValue: DropdownItem) {
-        viewBinding.conditionDetectionType.setSelectedItem(newValue)
+    private fun updateConditionType(newState: DetectionTypeState) {
+        viewBinding.conditionDetectionType.apply {
+            setSelectedItem(newState.dropdownItem)
+            setSelectorState(newState.selectorState)
+        }
     }
 
     private fun updateThreshold(newThreshold: Int) {
@@ -169,4 +209,45 @@ class ConditionDialog(
     private fun updateSaveButton(isValidCondition: Boolean) {
         viewBinding.layoutTopBar.setButtonEnabledState(DialogNavigationButton.SAVE, isValidCondition)
     }
+
+    private fun showAssociatedActionWarning() {
+        MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.dialog_overlay_title_warning)
+            .setMessage(R.string.message_condition_delete_associated_action)
+            .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
+                confirmDelete()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+            .apply {
+                window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY)
+            }
+            .show()
+    }
+
+    private fun showDetectionAreaSelector() {
+        debounceUserInteraction {
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = ConditionAreaSelectorMenu(
+                    onAreaSelected = viewModel::setDetectionArea,
+                ),
+                hideCurrent = true,
+            )
+        }
+    }
+
+    private fun confirmDelete() {
+        onDeleteClickedListener()
+        back()
+    }
+
+    private fun onConditionEditingStateChanged(isEditingCondition: Boolean) {
+        if (!isEditingCondition) {
+            Log.e(TAG, "Closing ConditionDialog because there is no condition edited")
+            finish()
+        }
+    }
 }
+
+private const val TAG = "ConditionDialog"

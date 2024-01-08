@@ -71,7 +71,7 @@ internal class ConditionRecorder : Recorder() {
 
     fun onProcessingEnd(success: Boolean, newResult: Double?) {
         super.onProcessingEnd(success)
-        if (success && newResult != null) detectionResultsRecorder.recordResult(newResult)
+        if (newResult != null) detectionResultsRecorder.recordResult(newResult)
     }
 
     fun toConditionProcessingDebugInfo() = ConditionProcessingDebugInfo(
@@ -81,9 +81,9 @@ internal class ConditionRecorder : Recorder() {
         avgProcessingTimeMs = if (count != 0L) processingTimingRecorder.totalTimeMs / count else 0L,
         minProcessingTimeMs = processingTimingRecorder.minTimeMs,
         maxProcessingTimeMs = processingTimingRecorder.maxTimeMs,
-        avgConfidenceRate = if (successCount != 0L) detectionResultsRecorder.total / successCount else 0.0,
-        minConfidenceRate = if (successCount != 0L) detectionResultsRecorder.min else 0.0,
-        maxConfidenceRate = if (successCount != 0L) detectionResultsRecorder.max else 0.0,
+        avgConfidenceRate = (detectionResultsRecorder.total / count).coerceIn(0.0, 100.0),
+        minConfidenceRate = detectionResultsRecorder.min.coerceAtLeast(0.0),
+        maxConfidenceRate = detectionResultsRecorder.max.coerceAtMost(100.0),
     )
 
     override fun clear() {

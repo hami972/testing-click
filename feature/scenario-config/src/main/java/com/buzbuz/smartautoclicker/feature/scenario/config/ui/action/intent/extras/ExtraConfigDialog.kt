@@ -17,6 +17,7 @@
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.intent.extras
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,16 +27,16 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
-import com.buzbuz.smartautoclicker.core.ui.bindings.setItems
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setItems
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
-import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionIntentExtraBinding
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
 
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.textfield.TextInputEditText
@@ -71,16 +72,18 @@ class ExtraConfigDialog(
                 dialogTitle.setText(R.string.dialog_overlay_title_extra_config)
 
                 buttonDismiss.setOnClickListener {
-                    onDismissClicked()
-                    back()
+                    debounceUserInteraction {
+                        onDismissClicked()
+                        back()
+                    }
                 }
                 buttonSave.apply {
                     visibility = View.VISIBLE
-                    setOnClickListener { onSaveButtonClicked() }
+                    setOnClickListener { debounceUserInteraction { onSaveButtonClicked() } }
                 }
                 buttonDelete.apply {
                     visibility = View.VISIBLE
-                    setOnClickListener { onDeleteButtonClicked() }
+                    setOnClickListener { debounceUserInteraction { onDeleteButtonClicked() } }
                 }
             }
 
@@ -108,6 +111,11 @@ class ExtraConfigDialog(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onDialogCreated(dialog: BottomSheetDialog) {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingExtra.collect(::onExtraEditingStateChanged) }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.key.collect(::updateExtraKey) }
@@ -178,6 +186,13 @@ class ExtraConfigDialog(
         viewBinding.layoutTopBar.setButtonEnabledState(com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton.SAVE, isValidExtra)
     }
 
+    private fun onExtraEditingStateChanged(isEditingExtra: Boolean) {
+        if (!isEditingExtra) {
+            Log.e(TAG, "Closing ExtraConfigDialog because there is no intent extra edited")
+            finish()
+        }
+    }
+
     private fun TextInputEditText.clearInputClass() {
         tag = null
     }
@@ -195,3 +210,5 @@ class ExtraConfigDialog(
         }
     }
 }
+
+private const val TAG = "ExtraConfigDialog"

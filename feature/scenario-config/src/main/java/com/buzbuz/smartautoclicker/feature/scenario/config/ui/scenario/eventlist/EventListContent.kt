@@ -18,6 +18,7 @@ package com.buzbuz.smartautoclicker.feature.scenario.config.ui.scenario.eventlis
 
 import android.content.Context
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
@@ -61,8 +62,9 @@ class EventListContent(appContext: Context) : NavBarDialogContent(appContext) {
 
     override fun onCreateView(container: ViewGroup): ViewGroup {
         eventAdapter = EventListAdapter(
-            itemClickedListener = ::showEventConfigDialog,
+            itemClickedListener = ::onEventItemClicked,
             itemReorderListener = viewModel::updateEventsPriority,
+            itemViewBound = ::onEventItemBound,
         )
 
         viewBinding = IncludeLoadableListBinding.inflate(LayoutInflater.from(context), container, false).apply {
@@ -104,19 +106,43 @@ class EventListContent(appContext: Context) : NavBarDialogContent(appContext) {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        viewModel.stopViewMonitoring()
+    }
+
     override fun onCreateButtonClicked() {
-        showEventConfigDialog(viewModel.createNewEvent(context))
+        debounceUserInteraction {
+            showEventConfigDialog(viewModel.createNewEvent(context))
+        }
     }
 
     override fun onCopyButtonClicked() {
-        showEventCopyDialog()
+        debounceUserInteraction {
+            showEventCopyDialog()
+        }
     }
 
     private fun onCreateCopyClickedWhileLimited() {
-        eventLimitReachedClick = true
+        debounceUserInteraction {
+            eventLimitReachedClick = true
 
-        dialogController.hide()
-        viewModel.onEventCountReachedAddCopyClicked(context)
+            dialogController.hide()
+            viewModel.onEventCountReachedAddCopyClicked(context)
+        }
+    }
+
+    private fun onEventItemClicked(event: Event) {
+        debounceUserInteraction {
+            showEventConfigDialog(event)
+        }
+    }
+
+    private fun onEventItemBound(index: Int, eventItemView: View?) {
+        if (index != 0) return
+
+        if (eventItemView != null) viewModel.monitorFirstEventView(eventItemView)
+        else viewModel.stopViewMonitoring()
     }
 
     private fun updateEventLimitationVisibility(isVisible: Boolean) {

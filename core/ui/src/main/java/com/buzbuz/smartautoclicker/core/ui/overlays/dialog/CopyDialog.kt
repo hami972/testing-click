@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 Kevin Buzeau
+ * Copyright (C) 2023 Kevin Buzeau
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,15 +16,15 @@
  */
 package com.buzbuz.smartautoclicker.core.ui.overlays.dialog
 
-import android.content.Context
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 
 import androidx.annotation.StyleRes
-import androidx.appcompat.widget.SearchView
 
 import com.buzbuz.smartautoclicker.core.ui.bindings.setEmptyText
+import com.buzbuz.smartautoclicker.core.ui.bindings.setOnDismissClickedListener
+import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
+import com.buzbuz.smartautoclicker.core.ui.bindings.setup
 import com.buzbuz.smartautoclicker.core.ui.databinding.DialogBaseCopyBinding
 
 abstract class CopyDialog(
@@ -35,33 +35,17 @@ abstract class CopyDialog(
     protected lateinit var viewBinding: DialogBaseCopyBinding
     /** The resource id for the dialog title. */
     protected abstract val titleRes: Int
+    /** The resource id for the search hint text. */
+    protected abstract val searchHintRes: Int
     /** The resource id for the text displayed when there is nothing to copy. */
     protected abstract val emptyRes: Int
 
     final override fun onCreateView(): ViewGroup {
         viewBinding = DialogBaseCopyBinding.inflate(LayoutInflater.from(context)).apply {
             layoutTopBar.apply {
-                dialogTitle.setText(titleRes)
-                buttonDismiss.setOnClickListener { back() }
-
-                search.apply {
-                    setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                        override fun onQueryTextSubmit(query: String?) = false
-                        override fun onQueryTextChange(newText: String?): Boolean {
-                            onSearchQueryChanged(newText)
-                            return true
-                        }
-                    })
-                    setOnSearchClickListener {
-                        dialogTitle.visibility = View.GONE
-                        buttonDismiss.visibility = View.GONE
-                    }
-                    setOnCloseListener {
-                        dialogTitle.visibility = View.VISIBLE
-                        buttonDismiss.visibility = View.VISIBLE
-                        false
-                    }
-                }
+                setup(titleRes, searchHintRes)
+                setOnDismissClickedListener { debounceUserInteraction { back() } }
+                setOnTextChangedListener(::onSearchQueryChanged)
             }
 
             layoutLoadableList.setEmptyText(emptyRes)

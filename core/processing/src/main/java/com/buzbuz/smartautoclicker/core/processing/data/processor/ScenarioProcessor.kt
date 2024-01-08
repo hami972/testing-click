@@ -18,7 +18,8 @@ package com.buzbuz.smartautoclicker.core.processing.data.processor
 
 import android.graphics.Bitmap
 import android.media.Image
-import com.buzbuz.smartautoclicker.core.display.toBitmap
+import android.util.Log
+import com.buzbuz.smartautoclicker.core.base.AndroidExecutor
 
 import com.buzbuz.smartautoclicker.core.detection.DetectionResult
 import com.buzbuz.smartautoclicker.core.detection.ImageDetector
@@ -28,10 +29,10 @@ import com.buzbuz.smartautoclicker.core.domain.model.event.Event
 import com.buzbuz.smartautoclicker.core.domain.model.AND
 import com.buzbuz.smartautoclicker.core.domain.model.ConditionOperator
 import com.buzbuz.smartautoclicker.core.domain.model.EXACT
+import com.buzbuz.smartautoclicker.core.domain.model.IN_AREA
 import com.buzbuz.smartautoclicker.core.domain.model.OR
 import com.buzbuz.smartautoclicker.core.domain.model.WHOLE_SCREEN
 import com.buzbuz.smartautoclicker.core.processing.data.ActionExecutor
-import com.buzbuz.smartautoclicker.core.processing.data.AndroidExecutor
 import com.buzbuz.smartautoclicker.core.processing.data.EndConditionVerifier
 import com.buzbuz.smartautoclicker.core.processing.data.ScenarioState
 
@@ -70,11 +71,11 @@ internal class ScenarioProcessor(
     private val actionExecutor = ActionExecutor(androidExecutor, scenarioState, randomize)
     /** Verifies the end conditions of a scenario. */
     private val endConditionVerifier = EndConditionVerifier(endConditions, endConditionOperator, onStopRequested)
+    /** Keep track of the detection results during the processing. */
+    private val processingResults = ProcessingResults(events)
 
     /** Tells if the screen metrics have been invalidated and should be updated. */
     private var invalidateScreenMetrics = true
-    /** The bitmap of the currently processed image. Kept in order to avoid instantiating a new one everytime. */
-    private var processedScreenBitmap: Bitmap? = null
 
     /** Drop all current cache related to screen metrics. */
     fun invalidateScreenMetrics() {
@@ -84,11 +85,12 @@ internal class ScenarioProcessor(
     /**
      * Find an event with the conditions fulfilled on the current image.
      *
-     * @param screenImage the image containing the current screen display.
+     * @param screenFrame the bitmap containing the current screen display.
      *
      * @return the first Event with all conditions fulfilled, or null if none has been found.
      */
-    suspend fun process(screenImage: Image) {
+    suspend fun process(screenFrame: Bitmap) {
+        // No more events enabled, there is nothing more to do. Stop the detection.
         if (scenarioState.areAllEventsDisabled()) {
             onStopRequested()
             return
@@ -97,16 +99,10 @@ internal class ScenarioProcessor(
         progressListener?.onImageProcessingStarted()
 
         // Set the current screen image
-        processedScreenBitmap = screenImage.toBitmap(processedScreenBitmap).let { screenBitmap ->
-            if (invalidateScreenMetrics) {
-                imageDetector.setScreenMetrics(screenBitmap, detectionQuality.toDouble())
-                invalidateScreenMetrics = false
-            }
+        initScreenFrame(screenFrame)
 
-            imageDetector.setupDetection(screenBitmap)
-
-            screenBitmap
-        }
+        // Clear previous results
+        processingResults.clearResults()
 
         for (event in scenarioState.getEnabledEvents()) {
             // No conditions ? This should not happen, skip this event
@@ -116,13 +112,13 @@ internal class ScenarioProcessor(
 
             // Event conditions verification
             progressListener?.onEventProcessingStarted(event)
-            val result = verifyConditions(event)
-            progressListener?.onEventProcessingCompleted(result)
+            val conditionAreFulfilled = verifyConditions(event)
+            progressListener?.onEventProcessingCompleted(event, conditionAreFulfilled, processingResults.getFirstMatchResult())
 
             // If conditions are fulfilled, execute this event's actions !
-            if (result.eventMatched) {
+            if (conditionAreFulfilled) {
                 event.actions.let { actions ->
-                    actionExecutor.executeActions(actions, result.detectionResult?.position)
+                    actionExecutor.executeActions(event, actions, processingResults)
                 }
 
                 // Check if an event has reached its max execution count.
@@ -140,63 +136,56 @@ internal class ScenarioProcessor(
     }
 
     /**
+     * Initialize the detection algorithm with the current screen frame.
+     * @return the image, as a Bitmap.
+     */
+    private fun initScreenFrame(screenFrame: Bitmap) {
+        if (invalidateScreenMetrics) {
+            imageDetector.setScreenMetrics(screenFrame, detectionQuality.toDouble())
+            invalidateScreenMetrics = false
+        }
+
+        imageDetector.setupDetection(screenFrame)
+    }
+
+    /**
      * Verifies if all conditions of an event are fulfilled.
-     *
      * Applies the provided conditions the currently processed [Image] according to the provided operator.
      *
      * @param event the event to verify the conditions of.
+     * @return true if the conditions are fulfilled, false if not.
      */
-    private suspend fun verifyConditions(event: Event) : ProcessorResult {
-        event.conditions.forEachIndexed { index, condition ->
+    private suspend fun verifyConditions(event: Event) : Boolean {
+        event.conditions.forEach { condition ->
             // Verify if the condition is fulfilled.
             progressListener?.onConditionProcessingStarted(condition)
-            val result = checkCondition(condition) ?: return ProcessorResult(false)
-            progressListener?.onConditionProcessingCompleted(result)
+            checkCondition(condition)
+                ?.let { result ->
+                    processingResults.addResult(condition, result.isDetected, result.position, result.confidenceRate)
+                    progressListener?.onConditionProcessingCompleted(result)
 
-            if (result.isDetected xor condition.shouldBeDetected) {
-                if (event.conditionOperator == AND) {
-                    // One of the condition isn't fulfilled, it's a false for a AND operator.
-                    return ProcessorResult(
-                        false,
-                        event,
-                        event.conditions[index],
-                        result,
-                    )
+                    if (condition.isNotFulfilled(result)) {
+                        // One of the condition isn't fulfilled, it's a false for a AND operator.
+                        if (event.conditionOperator == AND) return false
+                    } else if (event.conditionOperator == OR) {
+                        // One of the condition is fulfilled, it's a yes for a OR operator.
+                        return true
+                    }
                 }
-            } else if (event.conditionOperator == OR) {
-                // One of the condition is fulfilled, it's a yes for a OR operator.
-                return ProcessorResult(
-                    true,
-                    event,
-                    event.conditions[index],
-                    result,
-                )
-            }
-
-            // All conditions passed for AND, none are for OR.
-            if (index == event.conditions.size - 1) {
-                return if (event.conditionOperator == AND) {
-                    ProcessorResult(
-                        true,
-                        event,
-                        event.conditions[index],
-                        result,
-                    )
-                } else {
-                    ProcessorResult(
-                        false,
-                        event,
-                        event.conditions[index],
-                        result,
-                    )
+                ?:let {
+                    progressListener?.cancelCurrentConditionProcessing()
+                    return false
                 }
-            }
 
             yield()
         }
 
-        return ProcessorResult(false)
+        // All conditions passed for AND, none are for OR.
+        return event.conditionOperator == AND
     }
+
+    private fun Condition.isNotFulfilled(result: DetectionResult): Boolean =
+        result.isDetected xor shouldBeDetected
 
     /**
      * Check if the provided condition is fulfilled.
@@ -214,6 +203,7 @@ internal class ScenarioProcessor(
             }
         }
 
+        Log.w(TAG, "Bitmap for condition with path ${condition.path} not found.")
         return null
     }
 
@@ -227,22 +217,14 @@ internal class ScenarioProcessor(
      */
     private fun detect(condition: Condition, conditionBitmap: Bitmap): DetectionResult =
          when (condition.detectionType) {
-            EXACT -> imageDetector.detectCondition(conditionBitmap, condition.area, condition.threshold)
-            WHOLE_SCREEN -> imageDetector.detectCondition(conditionBitmap, condition.threshold)
-            else -> throw IllegalArgumentException("Unexpected detection type")
-        }
+             EXACT -> imageDetector.detectCondition(conditionBitmap, condition.area, condition.threshold)
+             WHOLE_SCREEN -> imageDetector.detectCondition(conditionBitmap, condition.threshold)
+             IN_AREA -> condition.detectionArea?.let { area ->
+                 imageDetector.detectCondition(conditionBitmap, area, condition.threshold)
+             } ?: throw IllegalArgumentException("Invalid IN_AREA condition, no area defined")
+             else -> throw IllegalArgumentException("Unexpected detection type")
+         }
 }
 
-/**
- * The results of a the scenario processing.
- * @param eventMatched true if the event conditions have been matched.
- * @param event the event tested.
- * @param condition the condition detected.
- * @param detectionResult the results of the detection.
- */
-internal data class ProcessorResult(
-    val eventMatched: Boolean,
-    val event: Event? = null,
-    val condition: Condition? = null,
-    val detectionResult: DetectionResult? = null,
-)
+/** Tag for logs. */
+private const val TAG = "ScenarioProcessor"

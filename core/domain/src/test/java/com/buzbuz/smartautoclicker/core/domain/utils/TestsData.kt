@@ -25,7 +25,7 @@ import com.buzbuz.smartautoclicker.core.database.entity.*
 import com.buzbuz.smartautoclicker.core.domain.model.AND
 import com.buzbuz.smartautoclicker.core.domain.model.ConditionOperator
 import com.buzbuz.smartautoclicker.core.domain.model.EXACT
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 import com.buzbuz.smartautoclicker.core.domain.model.action.IntentExtra
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
@@ -135,12 +135,16 @@ internal object TestsData {
         pressDuration: Long = CLICK_PRESS_DURATION,
         x: Int? = CLICK_X_POSITION,
         y: Int? = CLICK_Y_POSITION,
+        clickOnConditionId: Long? = null,
+        positionType: ClickPositionType =
+            if (x != null && y != null) ClickPositionType.USER_SELECTED
+            else ClickPositionType.ON_DETECTED_CONDITION,
         eventId: Long,
         priority: Int,
-        clickOnCondition: Boolean = x != null && y != null,
     ) = CompleteActionEntity(
         action = ActionEntity(id, eventId, priority, name, ActionType.CLICK, x = x, y = y,
-            clickOnCondition = clickOnCondition, pressDuration = pressDuration),
+            clickOnConditionId = clickOnConditionId, clickPositionType = positionType,
+            pressDuration = pressDuration),
         intentExtras = emptyList(),
     )
 
@@ -150,9 +154,13 @@ internal object TestsData {
         pressDuration: Long? = CLICK_PRESS_DURATION,
         x: Int? = CLICK_X_POSITION,
         y: Int? = CLICK_Y_POSITION,
-        clickOnCondition: Boolean = x != null && y != null,
+        clickOnConditionId: Long? = null,
+        positionType: Action.Click.PositionType =
+            if (x != null && y != null) Action.Click.PositionType.USER_SELECTED
+            else Action.Click.PositionType.ON_DETECTED_CONDITION,
         eventId: Long,
-    ) = Action.Click(id.asIdentifier(), eventId.asIdentifier(), name, pressDuration, x, y, clickOnCondition)
+    ) = Action.Click(id.asIdentifier(), eventId.asIdentifier(), name, pressDuration, positionType, x, y,
+            clickOnConditionId?.let { Identifier(databaseId = clickOnConditionId) })
 
 
     /* ------- Swipe Action Data ------- */

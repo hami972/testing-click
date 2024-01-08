@@ -20,30 +20,33 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
 
-import com.buzbuz.smartautoclicker.core.domain.model.AND
-import com.buzbuz.smartautoclicker.core.domain.model.EXACT
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 import com.buzbuz.smartautoclicker.core.domain.model.action.IntentExtra
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
 import com.buzbuz.smartautoclicker.core.domain.model.endcondition.EndCondition
 import com.buzbuz.smartautoclicker.core.domain.model.event.Event
-import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.data.ScenarioEditor
-import com.buzbuz.smartautoclicker.feature.scenario.config.data.base.IdentifierCreator
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.getClickPressDurationConfig
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.getEventConfigPreferences
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.getIntentIsAdvancedConfig
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.getPauseDurationConfig
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.getSwipeDurationConfig
+import com.buzbuz.smartautoclicker.core.base.identifier.IdentifierCreator
+import com.buzbuz.smartautoclicker.core.domain.model.action.Action.Click.PositionType
 
-class EditedItemsBuilder internal constructor(private val editor: ScenarioEditor) {
+class EditedItemsBuilder internal constructor(
+    context: Context,
+    private val editor: ScenarioEditor,
+) {
 
+    private val defaultValues = EditionDefaultValues(context)
     private val eventsIdCreator = IdentifierCreator()
     private val conditionsIdCreator = IdentifierCreator()
     private val actionsIdCreator = IdentifierCreator()
     private val intentExtrasIdCreator = IdentifierCreator()
     private val endConditionsIdCreator = IdentifierCreator()
+
+    /**
+     * Map of original condition list ids to copy condition ids.
+     * Will contain data only when creating an event from another one.
+     */
+    private val eventCopyConditionIdMap =  mutableMapOf<Identifier, Identifier>()
 
     internal fun resetGeneratedIdsCount() {
         eventsIdCreator.resetIdCount()
@@ -57,8 +60,8 @@ class EditedItemsBuilder internal constructor(private val editor: ScenarioEditor
         Event(
             id = eventsIdCreator.generateNewIdentifier(),
             scenarioId = getEditedScenarioIdOrThrow(),
-            name = context.getString(R.string.default_event_name),
-            conditionOperator = AND,
+            name = defaultValues.eventName(context),
+            conditionOperator = defaultValues.eventConditionOperator(),
             priority = getEditedEventsCountOrThrow(),
             conditions = mutableListOf(),
             actions = mutableListOf(),
@@ -71,21 +74,25 @@ class EditedItemsBuilder internal constructor(private val editor: ScenarioEditor
             id = eventId,
             scenarioId = scenarioId,
             name = "" + from.name,
-            conditions = from.conditions.map { createNewConditionFrom(it, eventId) },
+            conditions = from.conditions.map { conditionOrig ->
+                val conditionCopy = createNewConditionFrom(conditionOrig, eventId)
+                eventCopyConditionIdMap[conditionOrig.id] = conditionCopy.id
+                conditionCopy
+            },
             actions = from.actions.map { createNewActionFrom(it, eventId) }
-        )
+        ).also { eventCopyConditionIdMap.clear() }
     }
 
     fun createNewCondition(context: Context, area: Rect, bitmap: Bitmap): Condition =
         Condition(
             id = conditionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.resources.getString(R.string.default_condition_name),
+            name = defaultValues.conditionName(context),
             bitmap = bitmap,
             area = area,
-            threshold = context.resources.getInteger(R.integer.default_condition_threshold),
-            detectionType = EXACT,
-            shouldBeDetected = true,
+            threshold = defaultValues.conditionThreshold(context),
+            detectionType = defaultValues.conditionDetectionType(),
+            shouldBeDetected = defaultValues.conditionShouldBeDetected(),
         )
 
     fun createNewConditionFrom(condition: Condition, eventId: Identifier = getEditedEventIdOrThrow()) =
@@ -100,41 +107,41 @@ class EditedItemsBuilder internal constructor(private val editor: ScenarioEditor
         Action.Click(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.getString(R.string.default_click_name),
-            pressDuration = context.getEventConfigPreferences().getClickPressDurationConfig(context),
-            clickOnCondition = false,
+            name = defaultValues.clickName(context),
+            pressDuration = defaultValues.clickPressDuration(context),
+            positionType = defaultValues.clickPositionType(),
         )
 
     fun createNewSwipe(context: Context): Action.Swipe =
         Action.Swipe(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.getString(R.string.default_swipe_name),
-            swipeDuration = context.getEventConfigPreferences().getSwipeDurationConfig(context),
+            name = defaultValues.swipeName(context),
+            swipeDuration = defaultValues.swipeDuration(context),
         )
 
     fun createNewPause(context: Context): Action.Pause =
         Action.Pause(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.getString(R.string.default_pause_name),
-            pauseDuration = context.getEventConfigPreferences().getPauseDurationConfig(context)
+            name = defaultValues.pauseName(context),
+            pauseDuration = defaultValues.pauseDuration(context),
         )
 
     fun createNewIntent(context: Context): Action.Intent =
         Action.Intent(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.getString(R.string.default_intent_name),
-            isAdvanced = context.getEventConfigPreferences().getIntentIsAdvancedConfig(context),
+            name = defaultValues.intentName(context),
+            isAdvanced = defaultValues.intentIsAdvanced(context),
         )
 
     fun createNewToggleEvent(context: Context): Action.ToggleEvent =
         Action.ToggleEvent(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = getEditedEventIdOrThrow(),
-            name = context.getString(R.string.default_toggle_event_name),
-            toggleEventType = Action.ToggleEvent.ToggleType.ENABLE,
+            name = defaultValues.toggleEventName(context),
+            toggleEventType = defaultValues.toggleEventType(),
         )
 
     fun createNewActionFrom(from: Action, eventId: Identifier = getEditedEventIdOrThrow()): Action = when (from) {
@@ -145,12 +152,19 @@ class EditedItemsBuilder internal constructor(private val editor: ScenarioEditor
         is Action.ToggleEvent -> createNewToggleEventFrom(from, eventId)
     }
 
-    private fun createNewClickFrom(from: Action.Click, eventId: Identifier): Action.Click =
-        from.copy(
+    private fun createNewClickFrom(from: Action.Click, eventId: Identifier): Action.Click {
+        val conditionId =
+            if (from.positionType == PositionType.ON_DETECTED_CONDITION && from.clickOnConditionId != null)
+                eventCopyConditionIdMap[from.clickOnConditionId]
+            else null
+
+        return from.copy(
             id = actionsIdCreator.generateNewIdentifier(),
             eventId = eventId,
             name = "" + from.name,
+            clickOnConditionId = conditionId,
         )
+    }
 
     private fun createNewSwipeFrom(from: Action.Swipe, eventId: Identifier): Action.Swipe =
         from.copy(

@@ -26,9 +26,9 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+
 import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
 import com.buzbuz.smartautoclicker.feature.backup.R
-
 import com.buzbuz.smartautoclicker.feature.backup.domain.Backup
 import com.buzbuz.smartautoclicker.feature.backup.domain.BackupRepository
 
@@ -84,16 +84,21 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
      * @param uri the uri of the file provided by [createBackupFileCreationIntent] or
      * [createBackupRestorationFileSelectionIntent] intent data result.
      * @param isImport true for an import, false for an export.
-     * @param scenarios the list of scenario to be exported. Ignored for an import.
+     * @param smartScenarios the list of scenario to be exported. Ignored for an import.
      */
-    fun startBackup(uri: Uri, isImport: Boolean, scenarios: List<Long> = emptyList()) {
+    fun startBackup(
+        uri: Uri,
+        isImport: Boolean,
+        dumbScenarios: List<Long> = emptyList(),
+        smartScenarios: List<Long> = emptyList(),
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             if (isImport) {
                 repository.restoreScenarioBackup(uri, displayMetrics.screenSize).collect { backup ->
                     updateBackupState(backup, true)
                 }
             } else {
-                repository.createScenarioBackup(uri, scenarios, displayMetrics.screenSize).collect { backup ->
+                repository.createScenarioBackup(uri, dumbScenarios, smartScenarios, displayMetrics.screenSize).collect { backup ->
                     updateBackupState(backup, false)
                 }
             }
@@ -195,7 +200,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
             backup.failureCount == 0 ->
                 getContext().getString(R.string.message_backup_import_completed, backup.successCount)
             else -> {
-                iconStatus = R.drawable.img_warning
+                iconStatus = R.drawable.ic_warning
                 getContext().getString(
                     R.string.message_backup_import_completed_with_error,
                     backup.successCount,
@@ -205,7 +210,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         val compatVisibility = if (backup.compatWarning) {
-            iconStatus = R.drawable.img_warning
+            iconStatus = R.drawable.ic_warning
             View.VISIBLE
         } else {
             View.GONE
@@ -216,7 +221,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
             loadingVisibility = View.GONE,
             iconStatusVisibility = View.VISIBLE,
             iconStatus = iconStatus,
-            iconTint = if (iconStatus == R.drawable.img_warning) Color.YELLOW else Color.GREEN,
+            iconTint = if (iconStatus == R.drawable.ic_warning) Color.YELLOW else Color.GREEN,
             textStatusVisibility = View.VISIBLE,
             textStatusText = textStatus,
             compatWarningVisibility = compatVisibility,

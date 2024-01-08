@@ -24,11 +24,15 @@ import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.domain.EditionRepository
 import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewsManager
 import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewType
+import kotlinx.coroutines.FlowPreview
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
+@OptIn(FlowPreview::class)
 class EventDialogViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Repository containing the user editions. */
@@ -56,6 +60,11 @@ class EventDialogViewModel(application: Application) : AndroidViewModel(applicat
     val eventCanBeSaved: Flow<Boolean> = editionRepository.editionState.editedEventState
         .map { it.canBeSaved }
 
+    /** Tells if the user is currently editing an event. If that's not the case, dialog should be closed. */
+    val isEditingEvent: Flow<Boolean> = editionRepository.isEditingEvent
+        .distinctUntilChanged()
+        .debounce(1000)
+
     /** Tells if this event have associated end conditions. */
     fun isEventHaveRelatedEndConditions(): Boolean =
         editionRepository.editionState.isEditedEventReferencedByEndCondition()
@@ -71,8 +80,13 @@ class EventDialogViewModel(application: Application) : AndroidViewModel(applicat
         monitoredViewsManager.attach(MonitoredViewType.EVENT_DIALOG_TAB_BUTTON_CONDITIONS, view)
     }
 
+    fun monitorSaveButtonView(view: View) {
+        monitoredViewsManager.attach(MonitoredViewType.EVENT_DIALOG_BUTTON_SAVE, view)
+    }
+
     fun stopViewMonitoring() {
         monitoredViewsManager.apply {
+            detach(MonitoredViewType.EVENT_DIALOG_BUTTON_SAVE)
             detach(MonitoredViewType.EVENT_DIALOG_TAB_BUTTON_ACTIONS)
             detach(MonitoredViewType.EVENT_DIALOG_TAB_BUTTON_CONDITIONS)
         }

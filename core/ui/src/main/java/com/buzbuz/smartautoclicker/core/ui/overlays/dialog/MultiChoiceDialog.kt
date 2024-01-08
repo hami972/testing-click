@@ -47,7 +47,7 @@ open class MultiChoiceDialog<T : DialogChoice>(
     @StringRes private val dialogTitleText: Int,
     private val choices: List<T>,
     private val onChoiceSelected: (T) -> Unit,
-    private val onCanceled: () -> Unit,
+    private val onCanceled: (() -> Unit)? = null,
 ) : OverlayDialog(theme) {
 
     /** ViewBinding containing the views for this dialog. */
@@ -60,16 +60,20 @@ open class MultiChoiceDialog<T : DialogChoice>(
             layoutTopBar.apply {
                 dialogTitle.setText(dialogTitleText)
                 buttonDismiss.setOnClickListener {
-                    onCanceled()
-                    back()
+                    debounceUserInteraction {
+                        onCanceled?.invoke()
+                        back()
+                    }
                 }
             }
 
             adapter = ChoiceAdapter(
                 choices = choices,
                 onChoiceSelected = { choice ->
-                    back()
-                    onChoiceSelected(choice)
+                    debounceUserInteraction {
+                        back()
+                        onChoiceSelected(choice)
+                    }
                 },
                 onChoiceViewBound = ::onChoiceViewBound,
             )
@@ -180,7 +184,7 @@ private class ChoiceViewHolder<T : DialogChoice>(
                 choiceTitle.alpha = ENABLED_ITEM_ALPHA
                 choiceDescription.alpha = ENABLED_ITEM_ALPHA
                 choiceIcon.alpha = ENABLED_ITEM_ALPHA
-                choiceChevron.setImageResource(R.drawable.ic_chevron)
+                choiceChevron.setImageResource(R.drawable.ic_chevron_right)
             } else {
                 choiceTitle.alpha = DISABLED_ITEM_ALPHA
                 choiceDescription.alpha = DISABLED_ITEM_ALPHA

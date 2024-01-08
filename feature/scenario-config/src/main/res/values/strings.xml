@@ -25,7 +25,7 @@
     <string name="dialog_overlay_title_application_selection">Select an application</string>
     <string name="dialog_overlay_title_click">Click</string>
     <string name="dialog_overlay_title_condition_config">Condition</string>
-    <string name="dialog_overlay_title_copy_from">Copy from</string>
+    <string name="dialog_overlay_title_condition_selection">Select a condition</string>
     <string name="dialog_overlay_title_end_condition_config">End Condition</string>
     <string name="dialog_overlay_title_event_config">Event</string>
     <string name="dialog_overlay_title_event_selection">Select an event</string>
@@ -58,22 +58,34 @@
     <string name="item_desc_click">Click somewhere on the screen</string>
     <string name="item_desc_click_details">During %1$s at [%2$d, %3$d]</string>
     <string name="item_desc_click_position_on_condition">On condition</string>
+    <string name="item_desc_click_on_condition_and_operator">%1$s</string>
+    <string name="item_desc_click_on_condition_and_operator_not_found">No condition selected</string>
+    <string name="item_desc_click_on_condition_or_operator">Event is set to "One Condition", you can\'t select a specific one</string>
     <string name="item_desc_click_on_position">Click on %1$d, %2$d</string>
+    <string name="item_desc_detection_type_exact">At [%1$d, %2$d] [%3$d, %4$d]</string>
+    <string name="item_desc_detection_type_in_area">In [%1$d, %2$d] [%3$d, %4$d]</string>
     <string name="item_desc_intent">Interact with another application</string>
     <string name="item_desc_intent_action">Send %1$s</string>
     <string name="item_desc_intent_action_component">Send %1$s to %2$s</string>
     <string name="item_desc_pause">Pause the detection execution</string>
     <string name="item_desc_pause_details">During %1$s</string>
+    <string name="item_desc_position_select">Select the position</string>
     <string name="item_desc_swipe">Swipe from a position on the screen to another</string>
     <string name="item_desc_swipe_details">During %1$s from [%2$d, %3$d] to [%4$d, %5$d]</string>
     <string name="item_desc_swipe_positions">Swipe from %1$d, %2$d to %3$d, %4$d</string>
     <string name="item_desc_toggle_event">Change the enabled state of an event</string>
     <string name="item_desc_toggle_event_details">Change event state with type %1$s</string>
-    <string name="item_error_action_invalid_generic">This action is invalid</string>
     <string name="item_error_action_invalid_toggle_event_target">Target event not found</string>
     <string name="item_title_click">Click</string>
+    <string name="item_title_click_on_condition_and_operator">Click on a condition</string>
+    <string name="item_title_click_on_condition_or_operator">Click on the first detected condition</string>
     <string name="item_title_debug_generate_report">Generate a report</string>
+    <string name="item_title_debug_report_available">Debug report is available</string>
+    <string name="item_title_debug_report_not_available">No debug report available</string>
     <string name="item_title_debug_show_view">Show debug view</string>
+    <string name="item_title_detection_type_exact">Detection at the captured position</string>
+    <string name="item_title_detection_type_in_area">Detection on a part of the screen</string>
+    <string name="item_title_detection_type_screen">Detection on the whole screen</string>
     <string name="item_title_intent">Intent</string>
     <string name="item_title_pause">Wait</string>
     <string name="item_title_swipe">Swipe</string>
@@ -85,7 +97,6 @@
       -->
     <string name="message_empty_actions">No actions !</string>
     <string name="message_empty_conditions">No conditions !</string>
-    <string name="message_empty_copy">Nothing to copy</string>
     <string name="message_empty_end_condition_config_event_none_in_scenario">No Event created in the scenario</string>
     <string name="message_empty_end_condition_config_event_no_selection">No Event selected</string>
     <string name="message_empty_event_list">No events !</string>
@@ -107,15 +118,8 @@
     <string name="message_event_copy_with_toggle_action_from_another_scenario">This event have one or more toggle event actions referencing an event from another scenario.\nYou will have to update their target events before saving your scenario.</string>
     <string name="message_event_delete_associated_end_condition">This event have one or more end conditions referencing it. Deleting this event will delete the associated end conditions as well.\nAre you sure ?</string>
     <string name="message_event_delete_associated_action">This event have one or more actions referencing it. Deleting this event will delete the associated actions as well.\nAre you sure ?</string>
+    <string name="message_condition_delete_associated_action">This condition have one or more actions referencing it. Deleting this condition will delete the associated actions as well.\nAre you sure ?</string>
     <string name="message_tutorial_start">Learn how to use Smart AutoClicker</string>
-
-    <!--
-      - Toast messages.
-      - Can be pretty long (2 lines).
-      -->
-    <string name="toast_configure_single_click">Touch the position to click on</string>
-    <string name="toast_configure_swipe_from">Touch the position to start the swipe from</string>
-    <string name="toast_configure_swipe_to">Touch the position to end the swipe to</string>
 
     <!--
       - Section titles.
@@ -128,6 +132,7 @@
     <string name="section_title_intent_extras_value">Value</string>
     <string name="section_title_start_application">Start application</string>
     <string name="section_title_tutorial">Tutorial</string>
+    <string name="section_title_debug">Debug</string>
 
     <!--
       - List header.
@@ -152,7 +157,6 @@
       - TextButton content.
       - Should be short and concise.
       -->
-    <string name="button_text_click_position_select">Select the position</string>
     <string name="button_text_create_scenario">Create a scenario</string>
     <string name="button_text_intent_extra_type_select">Select a type</string>
     <string name="button_text_quality_speed">Speed</string>
@@ -164,15 +168,9 @@
       - Should be short and concise.
       -->
     <string name="input_field_label_name">Name</string>
-    <string name="input_field_label_click_press_duration">Press duration (ms)</string>
     <string name="input_field_label_execution_count">Executions</string>
     <string name="input_field_label_intent_extra_key">Key</string>
-    <string name="input_field_label_pause_duration">Pause duration (ms)</string>
-    <string name="input_field_label_scenario_name">Scenario name</string>
-    <string name="input_field_label_swipe_duration">Swipe duration (ms)</string>
-    <string name="input_field_label_anti_detection">Anti-detection</string>
     <string name="input_field_label_event_state">State</string>
-    <string name="input_field_error_required">Required</string>
     <string name="input_field_toggle_event_type">New event state</string>
 
     <!--
@@ -183,12 +181,6 @@
       -     * a title, displayed in the dropdown list and in the field if selected. Should be short and concise.
       -     * a helper text (if needed), displayed bellow the field and changed with the selected item. Max 2 lines.
       -->
-
-    <!-- Dropdown field for selecting anti bot state -->
-    <string name="dropdown_item_title_anti_detection_enabled">Enabled</string>
-    <string name="dropdown_item_title_anti_detection_disabled">Disabled</string>
-    <string name="dropdown_helper_text_anti_detection_enabled">Randomize the click swipe and pause positions and durations by a small random offset</string>
-    <string name="dropdown_helper_text_anti_detection_disabled">Execute all actions as declared</string>
 
     <!-- Dropdown field for selecting the event state -->
     <string name="dropdown_item_title_event_state_enabled">Enabled</string>
@@ -218,9 +210,8 @@
     <!-- Dropdown field for selecting the condition detection type. -->
     <string name="dropdown_label_condition_detection_type">Detection type</string>
     <string name="dropdown_item_title_detection_type_exact">Exact</string>
+    <string name="dropdown_item_title_detection_type_in_area">Area</string>
     <string name="dropdown_item_title_detection_type_screen">Screen</string>
-    <string name="dropdown_helper_text_detection_type_exact">The condition detection is made at the captured position</string>
-    <string name="dropdown_helper_text_detection_type_screen">The condition detection is made on the whole screen</string>
 
     <!-- Dropdown field for selecting the condition visibility. -->
     <string name="dropdown_label_condition_visibility">Visibility</string>
@@ -255,12 +246,7 @@
     <string name="content_desc_conditions_count">The number of conditions in this event</string>
     <string name="content_desc_actions_count">The number of actions in this event</string>
     <string name="content_desc_image_condition">The image to be detected</string>
-    <string name="content_desc_play_pause_scenario">Play or pause the scenario</string>
-    <string name="content_desc_stop_clicker">Stop Smart AutoClicker</string>
     <string name="content_desc_open_event_list">Open the event list</string>
-    <string name="content_desc_move_menu">Move the floating menu</string>
-    <string name="content_desc_confirm">Confirm</string>
-    <string name="content_desc_go_back">Back to dialog</string>
     <string name="content_desc_action_icon">The icon showing the type of action</string>
     <string name="content_desc_application_icon">The icon of the application to start.</string>
 

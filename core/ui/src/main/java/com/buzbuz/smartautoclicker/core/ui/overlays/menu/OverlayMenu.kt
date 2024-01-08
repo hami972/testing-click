@@ -23,15 +23,18 @@ import android.graphics.Point
 import android.util.Log
 import android.util.Size
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.View.MeasureSpec
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.ImageButton
 
 import androidx.annotation.CallSuper
 import androidx.annotation.IdRes
+import androidx.annotation.StyleRes
+import androidx.core.view.children
 import androidx.core.view.forEach
 import androidx.lifecycle.Lifecycle
 
@@ -64,10 +67,13 @@ import com.buzbuz.smartautoclicker.core.ui.R
  *
  * The position of the menu is saved in the [android.content.SharedPreferences] for each orientation.
  */
-abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
+abstract class OverlayMenu(
+    @StyleRes theme: Int? = null,
+    private val recreateOverlayViewOnRotation: Boolean = false,
+) : BaseOverlay(theme = theme, recreateOnRotation = false) {
 
-    /** The layout parameters of the menu layout. */
-    private val menuLayoutParams: WindowManager.LayoutParams = WindowManager.LayoutParams(
+    /** The base layout parameters of the menu layout & overlay view. */
+    private val baseLayoutParams: WindowManager.LayoutParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         DisplayMetrics.TYPE_COMPAT_OVERLAY,
@@ -75,7 +81,12 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-        PixelFormat.TRANSLUCENT)
+        PixelFormat.TRANSLUCENT,
+    )
+
+    /** The layout parameters of the menu layout. */
+    private val menuLayoutParams: WindowManager.LayoutParams =
+        WindowManager.LayoutParams().apply { copyFrom(baseLayoutParams) }
 
     private val animations: OverlayMenuAnimations = OverlayMenuAnimations()
 
@@ -91,16 +102,20 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
     private lateinit var menuLayout: ViewGroup
     /** The view displaying the background of the overlay. */
     private lateinit var menuBackground: ViewGroup
+    /** The view containing the buttons as direct children. */
+    private lateinit var buttonsContainer: ViewGroup
     /** Handles the window size computing when animating a resize of the overlay. */
-    private lateinit var resizeController: OverlayWindowResizeController
-    /** Handles the position of the menu. */
-    private lateinit var positionController: OverlayMenuPositionController
+    private lateinit var resizeController: OverlayMenuResizeController
+    /** Handles the save/load of the position of the menus. */
+    private lateinit var positionDataSource: OverlayMenuPositionDataSource
+    /** Handles the touch events on the move button. */
+    private lateinit var moveTouchEventHandler: OverlayMenuMoveTouchEventHandler
 
     /** Value of the alpha for a disabled item view in the menu. */
     private var disabledItemAlpha: Float = 1f
 
     /** The hide overlay button, if provided. */
-    private var hideOverlayButton: View? = null
+    private var hideOverlayButton: ImageButton? = null
     /** The move button, if provided. */
     private var moveButton: View? = null
 
@@ -112,6 +127,8 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
     protected var screenOverlayView: View? = null
     /** The layout parameters of the overlay view. */
     private var overlayLayoutParams:  WindowManager.LayoutParams? = null
+
+    private val onLockedPositionChangedListener: (Point?) -> Unit = ::onLockedPositionChanged
 
     /**
      * Creates the root view of the menu overlay.
@@ -142,7 +159,7 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
      * @return the layout parameters to apply to the overlay view.
      */
     protected open fun onCreateOverlayViewLayoutParams(): WindowManager.LayoutParams = WindowManager.LayoutParams().apply {
-        copyFrom(menuLayoutParams)
+        copyFrom(baseLayoutParams)
         displayMetrics.screenSize.let { size ->
             width = size.x
             height = size.y
@@ -162,32 +179,25 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
 
         // Set the clicks listener on the menu items
         menuBackground = menuLayout.findViewById<ViewGroup>(R.id.menu_background)
-        val buttonsContainer = menuLayout.findViewById<ViewGroup>(R.id.menu_items)
+        buttonsContainer = menuLayout.findViewById<ViewGroup>(R.id.menu_items)
         setupButtons(buttonsContainer)
+
+        // Setup the touch event handler for the move button
+        moveTouchEventHandler = OverlayMenuMoveTouchEventHandler(::updateMenuPosition)
 
         // Restore the last menu position, if any.
         menuLayoutParams.gravity = Gravity.TOP or Gravity.START
         overlayLayoutParams?.gravity = Gravity.TOP or Gravity.START
-        positionController = OverlayMenuPositionController(
-            menuLayout = menuLayout,
-            displayMetrics = displayMetrics,
-            onMenuPositionChanged = ::onNewMenuPosition,
-        )
-        positionController.loadMenuPosition(displayMetrics.orientation)
+        positionDataSource = OverlayMenuPositionDataSource.getInstance(context)
+        positionDataSource.addOnLockedPositionChangedListener(onLockedPositionChangedListener)
+        loadMenuPosition(displayMetrics.orientation)
 
         // Handle window resize animations
-        resizeController = OverlayWindowResizeController(
+        resizeController = OverlayMenuResizeController(
             backgroundViewGroup = menuBackground,
             resizedContainer = buttonsContainer,
             maximumSize = getWindowMaximumSize(menuBackground),
-            windowSizeListener = { size ->
-                menuLayoutParams.width = size.width
-                menuLayoutParams.height = size.height
-
-                if (lifecycle.currentState == Lifecycle.State.RESUMED) {
-                    windowManager.updateViewLayout(menuLayout, menuLayoutParams)
-                }
-            }
+            windowSizeListener = { size -> onNewWindowSize(size.width, size.height) }
         )
 
         // Add the overlay, if any. It needs to be below the menu or user won't be able to click on the menu.
@@ -210,8 +220,8 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
                     view.setOnTouchListener { _: View, event: MotionEvent -> onMoveTouched(event) }
                 }
                 R.id.btn_hide_overlay -> {
-                    hideOverlayButton = view
-                    setOverlayViewVisibility(View.VISIBLE)
+                    hideOverlayButton = (view as ImageButton)
+                    setOverlayViewVisibility(true)
                     view.setOnClickListener { onHideOverlayClicked() }
                 }
                 else -> view.setOnClickListener { v ->
@@ -227,15 +237,16 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         if (animations.showAnimationIsRunning) return
 
         super.start()
+        loadMenuPosition(displayMetrics.orientation)
 
         // Start the show animation for the menu
-        Log.d(TAG, "Start show animation...")
+        Log.d(TAG, "Start show overlay ${hashCode()} animation...")
 
         val animatedOverlayView = if (animateOverlayView()) screenOverlayView else null
         menuBackground.visibility = View.VISIBLE
         animatedOverlayView?.visibility = View.VISIBLE
         animations.startShowAnimation(menuBackground, animatedOverlayView) {
-            Log.d(TAG, "Show animation ended")
+            Log.d(TAG, "Show overlay ${hashCode()} animation ended")
 
             if (resumeOnceShown) {
                 resumeOnceShown = false
@@ -249,10 +260,12 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         if (lifecycle.currentState != Lifecycle.State.STARTED) return
 
         if (animations.showAnimationIsRunning) {
-            Log.d(TAG, "Show animation is running, delaying resume...")
+            Log.d(TAG, "Show overlay ${hashCode()} animation is running, delaying resume...")
             resumeOnceShown = true
             return
         }
+
+        forceWindowResize()
 
         super.resume()
     }
@@ -262,11 +275,13 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         if (animations.hideAnimationIsRunning) return
         if (lifecycle.currentState == Lifecycle.State.RESUMED) pause()
 
+        saveMenuPosition(displayMetrics.orientation)
+
         // Start the hide animation for the menu
-        Log.d(TAG, "Start hide animation...")
+        Log.d(TAG, "Start overlay ${hashCode()} hide animation...")
         val animatedOverlayView = if (animateOverlayView()) screenOverlayView else null
         animations.startHideAnimation(menuBackground, animatedOverlayView) {
-            Log.d(TAG, "Hide animation ended")
+            Log.d(TAG, "Hide overlay ${hashCode()} animation ended")
 
             menuBackground.visibility = View.GONE
             screenOverlayView?.visibility = View.GONE
@@ -285,17 +300,18 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) stop()
 
         if (animations.hideAnimationIsRunning) {
-            Log.d(TAG, "Hide animation is running, delaying destroy...")
+            Log.d(TAG, "Hide overlay ${hashCode()} animation is running, delaying destroy...")
             destroyOnceHidden = true
             return
         }
 
+        // Save last user position
+        positionDataSource.removeOnLockedPositionChangedListener(onLockedPositionChangedListener)
+        saveMenuPosition(displayMetrics.orientation)
+
         windowManager.removeView(menuLayout)
         screenOverlayView?.let { windowManager.removeView(it) }
         screenOverlayView = null
-
-        // Save last user position
-        positionController.saveMenuPosition(displayMetrics.orientation)
 
         resizeController.release()
         super@OverlayMenu.destroy()
@@ -307,37 +323,75 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
      * orientation.
      */
     override fun onOrientationChanged() {
-        positionController.saveMenuPosition(if (displayMetrics.orientation == Configuration.ORIENTATION_LANDSCAPE)
-            Configuration.ORIENTATION_PORTRAIT
-        else
-            Configuration.ORIENTATION_LANDSCAPE
+        saveMenuPosition(
+            if (displayMetrics.orientation == Configuration.ORIENTATION_LANDSCAPE) Configuration.ORIENTATION_PORTRAIT
+            else Configuration.ORIENTATION_LANDSCAPE
         )
-        positionController.loadMenuPosition(displayMetrics.orientation)
+        loadMenuPosition(displayMetrics.orientation)
 
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
             windowManager.updateViewLayout(menuLayout, menuLayoutParams)
-            screenOverlayView?.let { overlayView ->
-                displayMetrics.screenSize.let { size ->
-                    overlayLayoutParams?.width = size.x
-                    overlayLayoutParams?.height = size.y
-                }
-                windowManager.updateViewLayout(overlayView, overlayLayoutParams)
+
+            val overlayView = screenOverlayView ?: return
+            if (recreateOverlayViewOnRotation) {
+                recreateOverlayViewForRotation(overlayView)
+                return
             }
+
+            displayMetrics.screenSize.let { size ->
+                overlayLayoutParams?.width = size.x
+                overlayLayoutParams?.height = size.y
+            }
+            windowManager.updateViewLayout(overlayView, overlayLayoutParams)
         }
+    }
+
+    /**
+     * Recreates the overlay view after a screen rotation.
+     * As the Z order is dependant to the addition index in the WindowManager, we need to remove
+     * the menu and add it AFTER the new overlay view.
+     *
+     * @param oldOverlayView the overlay view before the rotation.
+     */
+    private fun recreateOverlayViewForRotation(oldOverlayView: View) {
+        screenOverlayView = onCreateOverlayView()
+        overlayLayoutParams = onCreateOverlayViewLayoutParams().apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+        val previousState = lifecycle.currentState
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+
+        windowManager.apply {
+            removeView(oldOverlayView)
+            removeView(menuLayout)
+            addView(screenOverlayView, overlayLayoutParams)
+            addView(menuLayout, menuLayoutParams)
+        }
+
+        lifecycleRegistry.currentState = previousState
+
+        setOverlayViewVisibility(oldOverlayView.visibility == View.VISIBLE)
     }
 
     /**
      * Called when an item (other than move/hide) in the menu have been pressed.
      * @param viewId the pressed view identifier.
      */
-    protected open fun onMenuItemClicked(@IdRes viewId: Int): Unit? = null
+    protected open fun onMenuItemClicked(@IdRes viewId: Int): Unit = Unit
+
+    /**
+     * Called when the visibility of the screen overlay have changed.
+     * @param isVisible true if it has became visible, false if it became invisible.
+     */
+    protected open fun onScreenOverlayVisibilityChanged(isVisible: Boolean): Unit = Unit
 
     /**
      * Get the maximum size the window can take.
      * @param backgroundView the background view.
      */
     protected open fun getWindowMaximumSize(backgroundView: ViewGroup): Size {
-        backgroundView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        backgroundView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
         return Size(backgroundView.measuredWidth, backgroundView.measuredHeight)
     }
 
@@ -370,7 +424,10 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
      * @param visible true for visible, false for gone.
      */
     protected fun setMenuItemVisibility(view: View, visible: Boolean) {
+        Log.d(TAG, "setMenuItemVisibility for ${hashCode()}, $view to $visible")
         view.visibility = if (visible) View.VISIBLE else View.GONE
+
+        if (!resizeController.isAnimating) forceWindowResize()
     }
 
     /**
@@ -384,6 +441,30 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         resizeController.animateLayoutChanges(layoutChanges)
     }
 
+    private fun forceWindowResize() {
+        buttonsContainer.measure(MeasureSpec.EXACTLY, MeasureSpec.EXACTLY)
+
+        // Get the height of all children + the padding
+        val height = buttonsContainer.children.fold(0) { acc, child ->
+            acc + (if (child.visibility == View.GONE) 0 else child.height)
+        } + buttonsContainer.paddingTop + buttonsContainer.paddingBottom
+
+        onNewWindowSize(
+            width = menuLayout.width,
+            height = height,
+        )
+    }
+
+    private fun onNewWindowSize(width: Int, height: Int) {
+        menuLayoutParams.width = width
+        menuLayoutParams.height = height
+
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            Log.d(TAG, "Updating menu window size: $width/$height")
+            windowManager.updateViewLayout(menuLayout, menuLayoutParams)
+        }
+    }
+
     /**
      * Handle the click on the hide overlay button.
      * Toggle the visible state of the overlay view.
@@ -392,11 +473,7 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
         if (resizeController.isAnimating) return
 
         screenOverlayView?.let { view ->
-            if (view.visibility == View.VISIBLE) {
-                setOverlayViewVisibility(View.GONE)
-            } else {
-                setOverlayViewVisibility(View.VISIBLE)
-            }
+            setOverlayViewVisibility(view.visibility != View.VISIBLE)
         }
     }
 
@@ -404,14 +481,22 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
      * Change the overlay view visibility, allowing the user the click on the Activity bellow the overlays.
      * Updates the hide button state, if any.
      *
-     * @param newVisibility the new visibility to apply.
+     * @param isOverlayVisible the new visibility to apply.
      */
-    protected fun setOverlayViewVisibility(newVisibility: Int) {
+    protected fun setOverlayViewVisibility(isOverlayVisible: Boolean) {
         screenOverlayView?.apply {
-            visibility = newVisibility
-            hideOverlayButton?.let {
-                setMenuItemViewEnabled(it, visibility == View.GONE , true)
+
+            Log.d(TAG, "setOverlayViewVisibility for ${this@OverlayMenu.hashCode()} with visibility $isOverlayVisible")
+
+            if (isOverlayVisible) {
+                visibility = View.VISIBLE
+                hideOverlayButton?.setImageResource(R.drawable.ic_visible_on)
+            } else {
+                visibility = View.GONE
+                hideOverlayButton?.setImageResource(R.drawable.ic_visible_off)
             }
+
+            onScreenOverlayVisibilityChanged(isOverlayVisible)
         }
     }
 
@@ -426,31 +511,47 @@ abstract class OverlayMenu : BaseOverlay(recreateOnRotation = false) {
     private fun onMoveTouched(event: MotionEvent) : Boolean {
         if (resizeController.isAnimating) return false
 
-        if (event.action == MotionEvent.ACTION_DOWN)
-            menuLayout.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-
-        return positionController.onMoveButtonTouchEvent(event)
+        return moveTouchEventHandler.onTouchEvent(menuLayout, event)
     }
 
+
     /** Safe setter for the position of the overlay menu ensuring it will not be displayed outside the screen. */
-    private fun onNewMenuPosition(position: Point) {
-        menuLayoutParams.x = position.x
-        menuLayoutParams.y = position.y
+    private fun updateMenuPosition(position: Point) {
+        menuLayoutParams.x = position.x.coerceIn(0, displayMetrics.screenSize.x - menuLayout.width)
+        menuLayoutParams.y = position.y.coerceIn(0, displayMetrics.screenSize.y - menuLayout.height)
 
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.CREATED)) {
+            Log.d(TAG, "Updating menu window position: ${menuLayoutParams.x}/${menuLayoutParams.y}")
             windowManager.updateViewLayout(menuLayout, menuLayoutParams)
         }
     }
 
-    internal fun lockPosition(position: Point) {
-        moveButton?.let { setMenuItemVisibility(it, false) }
-        positionController.lockPosition(position, displayMetrics.orientation)
+    private fun loadMenuPosition(orientation: Int) {
+        positionDataSource.loadMenuPosition(orientation)?.let { savedPosition ->
+            updateMenuPosition(savedPosition)
+        }
     }
 
-    internal fun unlockPosition() {
-        moveButton?.let { setMenuItemVisibility(it, true) }
-        positionController.unlockPosition(displayMetrics.orientation)
+    private fun saveMenuPosition(orientation: Int) {
+        positionDataSource.saveMenuPosition(
+            position = Point(menuLayoutParams.x, menuLayoutParams.y),
+            orientation = orientation,
+        )
+    }
+
+    private fun onLockedPositionChanged(lockedPosition: Point?) {
+        if (lockedPosition != null) {
+            Log.d(TAG, "Locking menu position of overlay ${hashCode()}")
+            moveButton?.let { setMenuItemVisibility(it, false) }
+            saveMenuPosition(displayMetrics.orientation)
+            updateMenuPosition(lockedPosition)
+        } else {
+            Log.d(TAG, "Unlocking menu position of overlay ${hashCode()}")
+            moveButton?.let { setMenuItemVisibility(it, true) }
+            loadMenuPosition(displayMetrics.orientation)
+        }
     }
 }
+
 /** Tag for logs */
 private const val TAG = "OverlayMenu"

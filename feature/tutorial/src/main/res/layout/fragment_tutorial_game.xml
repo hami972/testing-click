@@ -24,8 +24,9 @@
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/space_overlay_menu"
+        style="@style/AppTheme.Widget.CardOutlined"
         android:layout_width="@dimen/tutorial_overlay_menu_width"
-        android:layout_height="0dp"
+        android:layout_height="@dimen/tutorial_overlay_menu_height"
         android:layout_marginTop="@dimen/margin_vertical_large"
         android:layout_marginBottom="@dimen/margin_vertical_large"
         android:layout_marginStart="@dimen/margin_horizontal_default"
@@ -40,8 +41,8 @@
         android:layout_height="wrap_content"
         app:layout_constraintStart_toEndOf="@id/space_overlay_menu"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/game_area"/>
+        app:layout_constraintTop_toTopOf="@id/space_overlay_menu"
+        app:layout_constraintBottom_toBottomOf="@id/space_overlay_menu"/>
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/game_area"
@@ -56,25 +57,23 @@
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/blue_target"
-            android:layout_width="75dp"
-            android:layout_height="75dp"
-            app:srcCompat="@drawable/ic_game_target"
-            app:tint="@color/tutorial_game_target_blue"
+            android:layout_width="@dimen/tutorial_game_target_size"
+            android:layout_height="@dimen/tutorial_game_target_size"
+            app:srcCompat="@drawable/ic_game_target_primary"
             android:visibility="gone" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/red_target"
-            android:layout_width="75dp"
-            android:layout_height="75dp"
-            app:srcCompat="@drawable/ic_game_target"
-            app:tint="@color/tutorial_game_target_red"
+            android:layout_width="@dimen/tutorial_game_target_size"
+            android:layout_height="@dimen/tutorial_game_target_size"
+            app:srcCompat="@drawable/ic_game_target_secondary"
             android:visibility="gone" />
 
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/button_start_retry"
-        style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
+        style="@style/Widget.Material3.Button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
@@ -84,14 +83,19 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:icon="@drawable/ic_play_arrow"
         android:visibility="gone"
+        android:text="@string/button_text_tutorial_start_game"
         tools:visibility="visible"/>
 
     <include layout="@layout/include_tutorial_game_footer"
         android:id="@+id/footer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/margin_vertical_large"
+        android:layout_marginHorizontal="@dimen/margin_horizontal_default"
+        android:layout_marginBottom="@dimen/margin_vertical_large"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/game_area"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

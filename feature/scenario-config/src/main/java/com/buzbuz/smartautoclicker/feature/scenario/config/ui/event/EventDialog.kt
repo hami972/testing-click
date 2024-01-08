@@ -17,6 +17,7 @@
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.event
 
 import android.content.DialogInterface
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 
@@ -76,6 +77,11 @@ class EventDialog(
         super.onDialogCreated(dialog)
 
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingEvent.collect(::onEventEditingStateChanged) }
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.navItemsValidity.collect(::updateContentsValidity) }
                 launch { viewModel.eventCanBeSaved.collect(::updateSaveButton) }
@@ -88,6 +94,7 @@ class EventDialog(
         viewModel.apply {
             monitorActionTabView(navBarView.findViewById(R.id.page_actions))
             monitorConditionTabView(navBarView.findViewById(R.id.page_conditions))
+            monitorSaveButtonView(topBarBinding.buttonSave)
         }
     }
 
@@ -176,4 +183,13 @@ class EventDialog(
             }
             .show()
     }
+
+    private fun onEventEditingStateChanged(isEditingScenario: Boolean) {
+        if (!isEditingScenario) {
+            Log.e(TAG, "Closing EventDialog because there is no event edited")
+            finish()
+        }
+    }
 }
+
+private const val TAG = "EventDialog"

@@ -16,12 +16,17 @@
  */
 package com.buzbuz.smartautoclicker.core.ui.overlays.menu
 
+import android.util.Log
 import android.view.View
+import android.view.View.MeasureSpec
 import android.view.ViewGroup
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.view.animation.DecelerateInterpolator
+
 import androidx.core.view.children
+
+import com.buzbuz.smartautoclicker.core.base.extensions.setListener
 
 internal class OverlayMenuAnimations {
 
@@ -52,15 +57,27 @@ internal class OverlayMenuAnimations {
         private set
 
     fun startShowAnimation(view: View, overlayView: View? = null, onAnimationEnded: () -> Unit) {
+        if (showAnimationIsRunning) return
+
+        Log.d(TAG, "Start show animation on view ${view} with visibility ${view.visibility}")
+
         showAnimationIsRunning = true
-        showOverlayMenuAnimation.setOnEndListener {
-            showAnimationIsRunning = false
-            onAnimationEnded()
+        showOverlayMenuAnimation.setListener(
+            end = {
+                Log.d(TAG, "Show animation ended")
+                showAnimationIsRunning = false
+                onAnimationEnded()
+            }
+        )
+
+        if (hideAnimationIsRunning) {
+            Log.d(TAG, "Hide animation is running, stopping it first.")
+            hideOverlayMenuAnimation.cancel()
+            hideOverlayViewAnimation.cancel()
+            hideAnimationIsRunning = false
         }
 
-        hideOverlayMenuAnimation.cancel()
-        hideOverlayViewAnimation.cancel()
-
+        view.measure(MeasureSpec.EXACTLY, MeasureSpec.EXACTLY)
         view.startAnimation(showOverlayMenuAnimation)
         if (overlayView is ViewGroup && overlayView.childCount == 1) {
             overlayView.children.first().startAnimation(showOverlayViewAnimation)
@@ -68,27 +85,31 @@ internal class OverlayMenuAnimations {
     }
 
     fun startHideAnimation(view: View, overlayView: View? = null, onAnimationEnded: () -> Unit) {
-        hideAnimationIsRunning = true
-        hideOverlayMenuAnimation.setOnEndListener {
-            hideAnimationIsRunning = false
-            onAnimationEnded()
-        }
+        if (hideAnimationIsRunning) return
 
-        showOverlayMenuAnimation.cancel()
-        showOverlayViewAnimation.cancel()
+        Log.d(TAG, "Start hide animation")
+
+        hideAnimationIsRunning = true
+        hideOverlayMenuAnimation.setListener(
+            end = {
+                Log.d(TAG, "Hide animation ended")
+                hideAnimationIsRunning = false
+                onAnimationEnded()
+            }
+        )
+
+        if (showAnimationIsRunning) {
+            Log.d(TAG, "Show animation is running, stopping it first.")
+
+            showOverlayMenuAnimation.cancel()
+            showOverlayViewAnimation.cancel()
+            showAnimationIsRunning = false
+        }
 
         view.startAnimation(hideOverlayMenuAnimation)
         if (overlayView is ViewGroup && overlayView.childCount == 1) {
             overlayView.children.first().startAnimation(hideOverlayViewAnimation)
         }
-    }
-
-    private fun Animation.setOnEndListener(end: () -> Unit) {
-        setAnimationListener(object : Animation.AnimationListener {
-            override fun onAnimationStart(animation: Animation?) = Unit
-            override fun onAnimationRepeat(animation: Animation?) = Unit
-            override fun onAnimationEnd(animation: Animation?) { end() }
-        })
     }
 }
 
@@ -96,3 +117,5 @@ internal class OverlayMenuAnimations {
 private const val SHOW_ANIMATION_DURATION_MS = 250L
 /** Duration of the dismiss overlay menu animation. */
 private const val DISMISS_ANIMATION_DURATION_MS = 150L
+/** Tag for logs */
+private const val TAG = "OverlayMenuAnimations"

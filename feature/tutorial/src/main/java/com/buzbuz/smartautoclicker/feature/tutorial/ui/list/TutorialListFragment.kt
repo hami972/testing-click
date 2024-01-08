@@ -27,6 +27,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 
 import com.buzbuz.smartautoclicker.feature.tutorial.databinding.FragmentTutorialListBinding
 
@@ -40,6 +41,8 @@ class TutorialListFragment : Fragment() {
     private lateinit var viewBinding: FragmentTutorialListBinding
     /** Adapter for the list of tutorials. */
     private lateinit var adapter: TutorialListAdapter
+
+    private var isOpeningTutorial: Boolean = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         viewBinding = FragmentTutorialListBinding.inflate(inflater, container, false)
@@ -65,15 +68,11 @@ class TutorialListFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
-        viewModel.setOverlayVisibility(visible = false)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        viewModel.setOverlayVisibility(visible = true)
+        OverlayManager.getInstance(requireContext()).hideAll()
     }
 
     private fun onGameClicked(gameIndex: Int) {
+        isOpeningTutorial = true
         findNavController().navigate(TutorialListFragmentDirections.tutorialListToGame(gameIndex))
     }
 }

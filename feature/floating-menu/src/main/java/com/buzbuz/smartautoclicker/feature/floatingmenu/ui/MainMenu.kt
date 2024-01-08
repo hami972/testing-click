@@ -16,8 +16,11 @@
  */
 package com.buzbuz.smartautoclicker.feature.floatingmenu.ui
 
+import android.content.ComponentName
 import android.content.DialogInterface
+import android.content.Intent
 import android.util.Size
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.View
@@ -27,19 +30,17 @@ import androidx.appcompat.view.ContextThemeWrapper
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 
 import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.menu.OverlayMenu
 import com.buzbuz.smartautoclicker.core.ui.overlays.viewModels
+import com.buzbuz.smartautoclicker.core.ui.utils.AnimatedStatesImageButtonController
 import com.buzbuz.smartautoclicker.feature.floatingmenu.R
 import com.buzbuz.smartautoclicker.feature.floatingmenu.databinding.OverlayMenuBinding
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.scenario.ScenarioDialog
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.overlay.DebugModel
 import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.overlay.DebugOverlayView
-import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.report.DebugReportDialog
-import com.buzbuz.smartautoclicker.feature.tutorial.ui.TutorialActivity
 
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -66,20 +67,33 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
 
     /** View binding for the content of the overlay. */
     private lateinit var viewBinding: OverlayMenuBinding
-    /** Animation from play to pause. */
-    private lateinit var playToPauseDrawable: AnimatedVectorDrawableCompat
-    /** Animation from pause to play. */
-    private lateinit var pauseToPlayDrawable: AnimatedVectorDrawableCompat
+    /** Controls the animations of the play/pause button. */
+    private lateinit var playPauseButtonController: AnimatedStatesImageButtonController
 
     private var billingFlowTriggeredByDetectionLimitation: Boolean = false
     /** The coroutine job for the observable used in debug mode. Null when not in debug mode. */
     private var debugObservableJob: Job? = null
 
+    /**
+     * Tells if this service has handled onKeyEvent with ACTION_DOWN for a key in order to return
+     * the correct value when ACTION_UP is received.
+     */
+    private var keyDownHandled: Boolean = false
+
+    override fun animateOverlayView(): Boolean = false
+
     override fun onCreateMenu(layoutInflater: LayoutInflater): ViewGroup {
-        playToPauseDrawable = AnimatedVectorDrawableCompat.create(context, R.drawable.anim_play_pause)!!
-        pauseToPlayDrawable = AnimatedVectorDrawableCompat.create(context, R.drawable.anim_pause_play)!!
+        playPauseButtonController = AnimatedStatesImageButtonController(
+            context = context,
+            state1StaticRes = R.drawable.ic_play_arrow,
+            state2StaticRes = R.drawable.ic_pause,
+            state1to2AnimationRes = R.drawable.anim_play_pause,
+            state2to1AnimationRes = R.drawable.anim_pause_play,
+        )
 
         viewBinding = OverlayMenuBinding.inflate(layoutInflater)
+        playPauseButtonController.attachView(viewBinding.btnPlay)
+
         return viewBinding.root
     }
 
@@ -98,7 +112,7 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
 
         // Ensure the debug view state is correct
         viewBinding.layoutDebug.visibility = View.GONE
-        setOverlayViewVisibility(View.GONE)
+        setOverlayViewVisibility(false)
 
         // When the billing flow is not longer displayed, restore the dialogs states
         lifecycleScope.launch {
@@ -118,8 +132,8 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.canStartScenario.collect(::updatePlayPauseButtonEnabledState) }
                 launch { viewModel.detectionState.collect(::updateDetectionState) }
+                launch { viewModel.nativeLibError.collect(::showNativeLibErrorDialogIfNeeded) }
                 launch { debuggingViewModel.isDebugging.collect(::updateDebugOverlayViewVisibility) }
-                launch { debuggingViewModel.isDebugReportReady.collect(::showDebugReportDialog) }
             }
         }
     }
@@ -140,14 +154,36 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
         viewModel.stopViewMonitoring()
     }
 
-    override fun onMenuItemClicked(viewId: Int) {
-        when (viewId) {
-            R.id.btn_play -> {
-                viewModel.toggleDetection(context) {
-                    billingFlowTriggeredByDetectionLimitation = true
-                    hide()
+    override fun onDestroy() {
+        super.onDestroy()
+        playPauseButtonController.detachView()
+    }
+
+    override fun onKeyEvent(keyEvent: KeyEvent): Boolean {
+        if (keyEvent.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) return false
+
+        when (keyEvent.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (viewModel.stopDetection()) {
+                    keyDownHandled = true
+                    return true
                 }
             }
+
+            KeyEvent.ACTION_UP -> {
+                if (keyDownHandled) {
+                    keyDownHandled = false
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    override fun onMenuItemClicked(viewId: Int) {
+        when (viewId) {
+            R.id.btn_play -> onPlayPauseClicked()
             R.id.btn_click_list -> {
                 viewModel.startScenarioEdition {
                     showScenarioConfigDialog()
@@ -165,6 +201,18 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
         )
     }
 
+    private fun onPlayPauseClicked() {
+        if (viewModel.shouldShowStopVolumeDownTutorialDialog()) {
+            showStopVolumeDownTutorialDialog()
+            return
+        }
+
+        viewModel.toggleDetection(context) {
+            billingFlowTriggeredByDetectionLimitation = true
+            hide()
+        }
+    }
+
     /** Refresh the play menu item according to the scenario state. */
     private fun updatePlayPauseButtonEnabledState(canStartDetection: Boolean) =
         setMenuItemViewEnabled(viewBinding.btnPlay, canStartDetection)
@@ -178,26 +226,24 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
         when (newState) {
             UiState.Idle -> {
                 if (currentState == null) {
-                    viewBinding.btnPlay.setImageResource(R.drawable.ic_play_arrow)
+                    playPauseButtonController.toState1(false)
                 } else {
                     animateLayoutChanges {
                         setMenuItemVisibility(viewBinding.btnStop, true)
                         setMenuItemVisibility(viewBinding.btnClickList, true)
-                        viewBinding.btnPlay.setImageDrawable(pauseToPlayDrawable)
-                        pauseToPlayDrawable.start()
+                        playPauseButtonController.toState1(true)
                     }
                 }
             }
 
             UiState.Detecting -> {
                 if (currentState == null) {
-                    viewBinding.btnPlay.setImageResource(R.drawable.ic_pause)
+                    playPauseButtonController.toState2(false)
                 } else {
                     animateLayoutChanges {
                         setMenuItemVisibility(viewBinding.btnStop, false)
                         setMenuItemVisibility(viewBinding.btnClickList, false)
-                        viewBinding.btnPlay.setImageDrawable(playToPauseDrawable)
-                        playToPauseDrawable.start()
+                        playPauseButtonController.toState2(true)
                     }
                 }
             }
@@ -238,7 +284,7 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
     private fun updateDebugOverlayViewVisibility(isVisible: Boolean) {
         if (isVisible && debugObservableJob == null) {
             viewBinding.layoutDebug.visibility = View.VISIBLE
-            setOverlayViewVisibility(View.VISIBLE)
+            setOverlayViewVisibility(true)
             debugObservableJob = observeDebugValues()
 
         } else if (!isVisible && debugObservableJob != null) {
@@ -249,7 +295,7 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
             viewBinding.debugConditionName.text = null
             viewBinding.debugConfidenceRate.text = null
             viewBinding.layoutDebug.visibility = View.GONE
-            setOverlayViewVisibility(View.GONE)
+            setOverlayViewVisibility(false)
             (screenOverlayView as DebugOverlayView).clear()
         }
     }
@@ -276,29 +322,50 @@ class MainMenu(private val onStopClicked: () -> Unit) : OverlayMenu() {
         }
     }
 
-    private fun showDebugReportDialog(reportReady: Boolean) {
-        if (!reportReady) return
-
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = DebugReportDialog(),
-        )
-    }
-
     private fun showFirstTimeTutorialDialog() {
         MaterialAlertDialogBuilder(DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(context, R.style.AppTheme)))
-            .setTitle(R.string.dialog_title_tutorial_first_time)
+            .setTitle(R.string.dialog_title_tutorial)
             .setMessage(R.string.message_tutorial_first_time)
             .setPositiveButton(android.R.string.ok) { _: DialogInterface, _: Int ->
-                context.startActivity(TutorialActivity.getStartIntent(context))
+                context.startActivity(
+                    Intent()
+                        .setComponent(ComponentName(context.packageName, "com.buzbuz.smartautoclicker.feature.tutorial.ui.TutorialActivity"))
+                        .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .create()
-            .apply {
-                window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY)
-            }
+            .apply { window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY) }
             .show()
 
         viewModel.onFirstTimeTutorialDialogShown()
+    }
+
+    private fun showStopVolumeDownTutorialDialog() {
+        MaterialAlertDialogBuilder(DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(context, R.style.AppTheme)))
+            .setTitle(R.string.dialog_title_tutorial)
+            .setMessage(R.string.message_tutorial_volume_down_stop)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                onPlayPauseClicked()
+            }
+            .create()
+            .apply { window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY) }
+            .show()
+
+        viewModel.onStopVolumeDownTutorialDialogShown()
+    }
+
+    private fun showNativeLibErrorDialogIfNeeded(haveError: Boolean) {
+        if (!haveError) return
+
+        MaterialAlertDialogBuilder(DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(context, R.style.AppTheme)))
+            .setTitle(R.string.dialog_overlay_title_warning)
+            .setMessage(R.string.message_error_native_lib)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                onStopClicked()
+            }
+            .create()
+            .apply { window?.setType(DisplayMetrics.TYPE_COMPAT_OVERLAY) }
+            .show()
     }
 }

@@ -17,6 +17,7 @@
 package com.buzbuz.smartautoclicker.core.processing.data.processor
 
 import android.content.Context
+import android.graphics.Point
 
 import com.buzbuz.smartautoclicker.core.detection.DetectionResult
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
@@ -39,7 +40,9 @@ interface ProgressListener {
         isEventMatched: Boolean,
         event: Event?,
         condition: Condition?,
-        result: DetectionResult?,
+        isDetected: Boolean?,
+        position: Point?,
+        confidenceRate: Double?,
     )
 
     suspend fun onImageProcessingCompleted()
@@ -47,7 +50,17 @@ interface ProgressListener {
     suspend fun onSessionEnded()
 
     suspend fun cancelCurrentProcessing()
+
+    suspend fun cancelCurrentConditionProcessing()
 }
 
-internal suspend fun ProgressListener.onEventProcessingCompleted(result: ProcessorResult) =
-    onEventProcessingCompleted(result.eventMatched, result.event, result.condition, result.detectionResult)
+internal suspend fun ProgressListener.onEventProcessingCompleted(event: Event, isMatched: Boolean, result: ConditionProcessingResult?) {
+    onEventProcessingCompleted(
+        isMatched,
+        event,
+        result?.condition,
+        result?.isDetected,
+        result?.position,
+        result?.confidenceRate
+    )
+}

@@ -20,6 +20,7 @@ import android.app.Application
 import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
+import android.view.KeyEvent
 
 import androidx.annotation.CallSuper
 import androidx.appcompat.view.ContextThemeWrapper
@@ -30,6 +31,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle.State
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelLazy
+import androidx.lifecycle.lifecycleScope
 
 import com.buzbuz.smartautoclicker.core.display.DisplayMetrics
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
@@ -38,12 +40,12 @@ import com.google.android.material.color.DynamicColors
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 import java.io.PrintWriter
-
 
 /**
  * Base class for an overlay based ui providing lifecycle management.
@@ -64,8 +66,9 @@ abstract class BaseOverlay internal constructor(
     }
 
     /** The lifecycle of the ui component controlled by this class */
-    private var lifecycleRegistry = LifecycleRegistry(this)
-    override val lifecycle: Lifecycle = lifecycleRegistry
+    internal var lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
 
     /** The store for the view models of the [BaseOverlay] implementations. */
     private val modelStore: ViewModelStore by lazy { ViewModelStore() }
@@ -75,11 +78,15 @@ abstract class BaseOverlay internal constructor(
         ViewModelProvider.AndroidViewModelFactory.getInstance((context.applicationContext as Application))
     }
 
+    /** Job used for debouncing the user interactions. */
+    private var debounceUserInteractionJob: Job? = null
+
     /**
      * Listener called when the overlay shown by the controller is dismissed.
      * Null unless the overlay is shown.
      */
     private var onDestroyListener: (() -> Unit)? = null
+
     /** True if the overlay should be recreated on next [start] call, false if not. */
     private var shouldBeRecreated: Boolean = false
 
@@ -93,7 +100,7 @@ abstract class BaseOverlay internal constructor(
 
     override fun back() {
         if (!OverlayManager.getInstance(context).navigateUp(context)) {
-            Log.w(TAG, "Overlay can't be removed from back stack, destroying manually...")
+            Log.w(TAG, "Overlay ${hashCode()} can't be removed from back stack, destroying manually...")
             destroy()
         }
     }
@@ -128,9 +135,10 @@ abstract class BaseOverlay internal constructor(
     override fun start() {
         if (lifecycleRegistry.currentState != State.CREATED) return
 
+        // During the orientation change, this overlay was hidden (in CREATED state). As it was not displayed, the
+        // recreation of the overlay was delayed to its next start request.
         if (shouldBeRecreated) {
-            recreate(true)
-            return
+            recreate()
         }
 
         Log.d(TAG, "show overlay ${hashCode()}")
@@ -184,6 +192,9 @@ abstract class BaseOverlay internal constructor(
         onDestroy()
 
         if (!shouldBeRecreated) {
+            debounceUserInteractionJob?.cancel()
+            debounceUserInteractionJob = null
+
             onDestroyListener?.invoke()
             onDestroyListener = null
 
@@ -195,13 +206,21 @@ abstract class BaseOverlay internal constructor(
         }
     }
 
+    protected fun debounceUserInteraction(userInteraction: () -> Unit) {
+        if (debounceUserInteractionJob == null && lifecycleRegistry.currentState == State.RESUMED) {
+            debounceUserInteractionJob = lifecycleScope.launch {
+                userInteraction()
+                delay(800)
+                debounceUserInteractionJob = null
+            }
+        }
+    }
+
     /**
      * Destroy and create the overlay. once again.
      * The [onDestroyListener] will not be called during the process.
-     *
-     * @param resume true if the overlay should be immediately shown after recreation, false if not.
      */
-    private fun recreate(resume: Boolean) {
+    private fun recreate() {
         if (!lifecycleRegistry.currentState.isAtLeast(State.CREATED)) return
 
         Log.d(TAG, "recreating overlay ${hashCode()}")
@@ -211,10 +230,6 @@ abstract class BaseOverlay internal constructor(
 
         lifecycleRegistry = LifecycleRegistry(this)
         create(context)
-        if (resume) {
-            start()
-            resume()
-        }
     }
 
     /**
@@ -225,12 +240,12 @@ abstract class BaseOverlay internal constructor(
      * - If [recreateOnRotation] is true and the lifecycle at least [Lifecycle.State.STARTED]: the overlay is visible
      * and thus, must be recreated => Destroy and Create the overlay again.
      * - If [recreateOnRotation] is but the lifecycle is below [Lifecycle.State.STARTED]: the overlay is created but
-     * not hidden => Flag the overlay for recreation and delay it until next show call.
+     * hidden => Flag the overlay for recreation and delay it until next show call.
      *
      * In all cases, [onOrientationChanged] will be called to notify this [BaseOverlay] implementation for
      * rotation.
      */
-    internal fun changeOrientation() {
+    override fun changeOrientation() {
         Log.d(TAG, "onOrientationChanged for overlay ${hashCode()}")
 
         onOrientationChanged()
@@ -238,12 +253,18 @@ abstract class BaseOverlay internal constructor(
         if (!recreateOnRotation) return
 
         shouldBeRecreated = true
-        if (lifecycleRegistry.currentState.isAtLeast(State.STARTED)) {
-            recreate(true)
+        val preRotationLifecycleState = lifecycleRegistry.currentState
+        if (preRotationLifecycleState.isAtLeast(State.STARTED)) {
+            recreate()
+            start()
+            if (preRotationLifecycleState == State.RESUMED) resume()
         } else {
             Log.d(TAG, "not visible, delay recreation of overlay ${hashCode()}")
         }
     }
+
+    override fun handleKeyEvent(keyEvent: KeyEvent): Boolean =
+        onKeyEvent(keyEvent)
 
     /**
      * Get a new context wrapper from the provided theme. If the theme is null, the application theme is used.

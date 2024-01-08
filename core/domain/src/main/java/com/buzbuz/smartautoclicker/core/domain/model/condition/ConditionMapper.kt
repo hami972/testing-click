@@ -19,7 +19,7 @@ package com.buzbuz.smartautoclicker.core.domain.model.condition
 import android.graphics.Rect
 
 import com.buzbuz.smartautoclicker.core.database.entity.ConditionEntity
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 
 /** @return the entity equivalent of this condition. */
 internal fun Condition.toEntity() = ConditionEntity(
@@ -34,6 +34,10 @@ internal fun Condition.toEntity() = ConditionEntity(
     threshold = threshold,
     detectionType = detectionType,
     shouldBeDetected = shouldBeDetected,
+    detectionAreaLeft = detectionArea?.left,
+    detectionAreaTop = detectionArea?.top,
+    detectionAreaRight = detectionArea?.right,
+    detectionAreaBottom = detectionArea?.bottom,
 )
 
 /** @return the condition for this entity. */
@@ -45,5 +49,12 @@ internal fun ConditionEntity.toCondition(asDomain: Boolean = false) = Condition(
     area = Rect(areaLeft, areaTop, areaRight, areaBottom),
     threshold = threshold,
     detectionType = detectionType,
+    detectionArea = getDetectionArea(),
     shouldBeDetected = shouldBeDetected,
 )
+
+private fun ConditionEntity.getDetectionArea(): Rect? =
+    if (detectionAreaLeft != null && detectionAreaTop != null && detectionAreaRight != null && detectionAreaBottom != null)
+        Rect(detectionAreaLeft!!, detectionAreaTop!!, detectionAreaRight!!, detectionAreaBottom!!)
+    else
+        null

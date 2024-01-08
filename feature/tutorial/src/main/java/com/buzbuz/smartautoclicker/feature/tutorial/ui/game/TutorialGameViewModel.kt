@@ -21,45 +21,31 @@ import android.graphics.PointF
 import android.graphics.Rect
 
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 
 import com.buzbuz.smartautoclicker.feature.tutorial.domain.TutorialRepository
+import com.buzbuz.smartautoclicker.feature.tutorial.domain.model.TutorialStep
 import com.buzbuz.smartautoclicker.feature.tutorial.domain.model.game.TutorialGame
 import com.buzbuz.smartautoclicker.feature.tutorial.domain.model.game.TutorialGameTargetType
 
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TutorialGameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val tutorialRepository: TutorialRepository = TutorialRepository.getTutorialRepository(application)
 
-    val currentGame: StateFlow<TutorialGame?> = tutorialRepository.activeTutorial
-        .map { it?.game }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(3_000),
-            null,
-        )
+    val currentGame: Flow<TutorialGame?> = tutorialRepository.activeGame
 
-    val showOverlayMenu: Flow<Boolean> = tutorialRepository.tutorialOverlayState
-        .map { it?.hideFloatingUi == false }
+    val shouldDisplayStepOverlay: Flow<Boolean> = tutorialRepository.activeStep
+        .map { step -> step != null && step is TutorialStep.TutorialOverlay }
 
-    val shouldDisplayStepOverlay: Flow<Boolean> = tutorialRepository.tutorialOverlayState
-        .map { it != null }
-
-    private val isStarted: Flow<Boolean> = currentGame
+    val isStarted: Flow<Boolean> = currentGame
         .flatMapLatest { it?.state?.map { it.isStarted } ?: flowOf(false) }
         .distinctUntilChanged()
 
@@ -75,29 +61,17 @@ class TutorialGameViewModel(application: Application) : AndroidViewModel(applica
         .flatMapLatest { it?.targets ?: flowOf(emptyMap()) }
         .distinctUntilChanged()
 
-    val playRetryBtnState: Flow<PlayRetryButtonState> =
-        combine(currentGame, isStarted, gameScore) { game, started, score ->
-            when {
-                game == null || started -> PlayRetryButtonState.GONE
-                score == 0 -> PlayRetryButtonState.PLAY
-                else -> PlayRetryButtonState.RETRY
-            }
-        }
-
-    val nextGameBtnVisibility: Flow<Boolean> =
-        combine(currentGame, isStarted, gameScore) { game, started, score ->
-            if (game == null) return@combine false
-            !started && score >= game.highScore
+    val playRetryBtnVisibility: Flow<Boolean> =
+        combine(currentGame, isStarted) { game, started ->
+            game != null && !started
         }
 
     fun startTutorial(gameIndex: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            tutorialRepository.startTutorial(gameIndex)
-        }
+        tutorialRepository.startTutorial(gameIndex)
     }
 
     fun startGame(area: Rect, targetsSize: Int) {
-        tutorialRepository.startGame(viewModelScope, area, targetsSize)
+        tutorialRepository.startGame(area, targetsSize)
     }
 
     fun onTargetHit(color: TutorialGameTargetType) {
@@ -105,14 +79,6 @@ class TutorialGameViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun stopTutorial() {
-        viewModelScope.launch(Dispatchers.IO) {
-            tutorialRepository.stopTutorial()
-        }
+        tutorialRepository.stopTutorial()
     }
-}
-
-enum class PlayRetryButtonState {
-    GONE,
-    PLAY,
-    RETRY,
 }

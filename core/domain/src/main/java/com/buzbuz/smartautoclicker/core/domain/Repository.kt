@@ -23,8 +23,7 @@ import com.buzbuz.smartautoclicker.core.bitmaps.BitmapManager
 import com.buzbuz.smartautoclicker.core.database.ClickDatabase
 import com.buzbuz.smartautoclicker.core.database.TutorialDatabase
 import com.buzbuz.smartautoclicker.core.database.entity.CompleteScenario
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
-import com.buzbuz.smartautoclicker.core.domain.model.TutorialSuccessState
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 import com.buzbuz.smartautoclicker.core.domain.model.condition.Condition
 import com.buzbuz.smartautoclicker.core.domain.model.endcondition.EndCondition
@@ -81,8 +80,10 @@ interface Repository {
      * Create a copy of a scenario and insert it in the database.
      *
      * @param completeScenario the scenario to copy.
+     *
+     * @return the database id of the copy, or null if the copy has encountered an error.
      */
-    suspend fun addScenarioCopy(completeScenario: CompleteScenario): Boolean
+    suspend fun addScenarioCopy(completeScenario: CompleteScenario): Long?
 
     /**
      * Update a scenario.
@@ -141,22 +142,14 @@ interface Repository {
      * @param scenarioId the identifier of the scenario to ge the events from.
      * @return the list of complete events, ordered by execution priority.
      */
-    suspend fun getCompleteEventList(scenarioId: Long): List<Event>
-
-    /**
-     * Get the list of complete events for a given scenario.
-     *
-     * @param scenarioId the identifier of the scenario to ge the events from.
-     * @return the list of complete events, ordered by execution priority.
-     */
-    fun getCompleteEventListFlow(scenarioId: Long): Flow<List<Event>>
+    fun getEventsFlow(scenarioId: Long): Flow<List<Event>>
 
     /**
      * Get all events from all scenarios.
      *
      * @return the list containing all events.
      */
-    fun getAllEvents(): Flow<List<Event>>
+    fun getAllEventsFlow(): Flow<List<Event>>
 
     /**
      * Get all actions from all events.
@@ -187,14 +180,9 @@ interface Repository {
     /** Clean the cache of this repository. */
     fun cleanCache()
 
-    /** The list of scenarios. */
-    val tutorialSuccessList: Flow<List<TutorialSuccessState>>
-
     fun startTutorialMode()
 
     fun stopTutorialMode()
 
-    suspend fun getTutorialScenarioDatabaseId(index: Int): Identifier?
-
-    suspend fun setTutorialSuccess(index: Int, scenarioId: Identifier)
+    fun isTutorialModeEnabled(): Boolean
 }

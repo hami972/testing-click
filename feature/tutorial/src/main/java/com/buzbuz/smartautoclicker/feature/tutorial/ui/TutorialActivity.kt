@@ -16,9 +16,8 @@
  */
 package com.buzbuz.smartautoclicker.feature.tutorial.ui
 
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -28,18 +27,13 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.feature.tutorial.R
+
 import kotlinx.coroutines.launch
 
 
 class TutorialActivity : AppCompatActivity() {
-
-    companion object {
-
-        fun getStartIntent(context: Context): Intent =
-            Intent(context, TutorialActivity::class.java)
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
 
     private val viewModel: TutorialViewModel by viewModels()
     private lateinit var navController: NavController
@@ -47,6 +41,8 @@ class TutorialActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_tutorial)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         setupActionBar()
 
         navController = (supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment)
@@ -54,21 +50,28 @@ class TutorialActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.shouldBeStopped.collect { shouldBeStopped ->
-                    if (shouldBeStopped) finish()
+                launch {
+                    viewModel.shouldBeStopped.collect { shouldBeStopped ->
+                        if (shouldBeStopped) finish()
+                    }
+                }
+
+                launch {
+                    viewModel.onFloatingUiVisibilityStep.collect { newVisibility ->
+                        setFloatingUiVisibility(newVisibility)
+                        viewModel.validateFloatingUiVisibilityStep()
+                    }
                 }
             }
         }
-    }
 
-    override fun onStart() {
-        super.onStart()
         viewModel.startTutorialMode()
     }
 
-    override fun onStop() {
+    override fun onDestroy() {
         viewModel.stopTutorialMode()
-        super.onStop()
+        super.onDestroy()
+        setFloatingUiVisibility(true)
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -79,5 +82,12 @@ class TutorialActivity : AppCompatActivity() {
     private fun setupActionBar() {
         setSupportActionBar(findViewById(R.id.topAppBar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+    }
+
+    private fun setFloatingUiVisibility(isVisible: Boolean) {
+        OverlayManager.getInstance(this).apply {
+            if (isVisible) restoreVisibility()
+            else hideAll()
+        }
     }
 }

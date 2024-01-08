@@ -17,16 +17,21 @@
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.swipe
 
 import android.graphics.Point
+import android.graphics.PointF
 import android.text.InputFilter
 import android.text.InputType
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.graphics.toPoint
 
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.buzbuz.smartautoclicker.core.base.GESTURE_DURATION_MAX_VALUE
+import com.buzbuz.smartautoclicker.core.domain.model.action.Action
 
 import com.buzbuz.smartautoclicker.core.ui.bindings.setButtonEnabledState
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
@@ -34,13 +39,12 @@ import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.utils.MinMaxInputFilter
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.OverlayDialog
-import com.buzbuz.smartautoclicker.core.domain.model.action.GESTURE_DURATION_MAX_VALUE
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.DialogConfigActionSwipeBinding
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.ClickSwipeSelectorMenu
-import com.buzbuz.smartautoclicker.feature.scenario.config.ui.action.CoordinatesSelector
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
+import com.buzbuz.smartautoclicker.core.ui.overlays.menu.PositionSelectorMenu
+import com.buzbuz.smartautoclicker.core.ui.views.actionbrief.SwipeDescription
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 import kotlinx.coroutines.launch
@@ -65,8 +69,10 @@ class SwipeDialog(
                 dialogTitle.setText(R.string.dialog_overlay_title_swipe)
 
                 buttonDismiss.setOnClickListener {
-                    onDismissClicked()
-                    back()
+                    debounceUserInteraction {
+                        onDismissClicked()
+                        back()
+                    }
                 }
                 buttonSave.apply {
                     visibility = View.VISIBLE
@@ -104,6 +110,11 @@ class SwipeDialog(
 
     override fun onDialogCreated(dialog: BottomSheetDialog) {
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch { viewModel.isEditingAction.collect(::onActionEditingStateChanged) }
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.name.collect(::updateClickName) }
                 launch { viewModel.nameError.collect(viewBinding.editNameLayout::setError)}
@@ -116,14 +127,18 @@ class SwipeDialog(
     }
 
     private fun onSaveButtonClicked() {
-        viewModel.saveLastConfig()
-        onConfirmClicked()
-        back()
+        debounceUserInteraction {
+            viewModel.saveLastConfig()
+            onConfirmClicked()
+            back()
+        }
     }
 
     private fun onDeleteButtonClicked() {
-        onDeleteClicked()
-        back()
+        debounceUserInteraction {
+            onDeleteClicked()
+            back()
+        }
     }
 
     private fun updateClickName(newName: String?) {
@@ -154,17 +169,40 @@ class SwipeDialog(
     }
 
     private fun showPositionSelector() {
-        OverlayManager.getInstance(context).navigateTo(
-            context = context,
-            newOverlay = ClickSwipeSelectorMenu(
-                selector = CoordinatesSelector.Two(),
-                onCoordinatesSelected = { selector ->
-                    (selector as CoordinatesSelector.Two).let {
-                        viewModel.setPositions(it.coordinates1!!, it.coordinates2!!)
-                    }
-                },
-            ),
-            hideCurrent = true,
-        )
+        viewModel.getEditedSwipe()?.let { swipe ->
+            OverlayManager.getInstance(context).navigateTo(
+                context = context,
+                newOverlay = PositionSelectorMenu(
+                    actionDescription = SwipeDescription(
+                        from = swipe.getEditionFromPosition(),
+                        to = swipe.getEditionToPosition(),
+                        swipeDurationMs = swipe.swipeDuration ?: 250L,
+                    ),
+                    onConfirm = { description ->
+                        (description as SwipeDescription).let { swipeDesc ->
+                            viewModel.setPositions(swipeDesc.from!!.toPoint(), swipeDesc.to!!.toPoint())
+                        }
+                    },
+                ),
+                hideCurrent = true,
+            )
+        }
     }
+
+    private fun onActionEditingStateChanged(isEditingAction: Boolean) {
+        if (!isEditingAction) {
+            Log.e(TAG, "Closing ClickDialog because there is no action edited")
+            finish()
+        }
+    }
+
+    private fun Action.Swipe.getEditionFromPosition(): PointF? =
+        if (fromX == null || fromY == null) null
+        else PointF(fromX!!.toFloat(), fromY!!.toFloat())
+
+    private fun Action.Swipe.getEditionToPosition(): PointF? =
+        if (toX == null || toY == null) null
+        else PointF(toX!!.toFloat(), toY!!.toFloat())
 }
+
+private const val TAG = "SwipeDialog"

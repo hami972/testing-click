@@ -29,14 +29,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 
-import com.buzbuz.smartautoclicker.core.ui.bindings.DropdownItem
-import com.buzbuz.smartautoclicker.core.ui.bindings.setItems
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.DropdownItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setItems
 import com.buzbuz.smartautoclicker.core.ui.bindings.setLabel
 import com.buzbuz.smartautoclicker.core.ui.bindings.setOnTextChangedListener
-import com.buzbuz.smartautoclicker.core.ui.bindings.setSelectedItem
+import com.buzbuz.smartautoclicker.core.ui.bindings.dropdown.setSelectedItem
 import com.buzbuz.smartautoclicker.core.ui.bindings.setText
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
 import com.buzbuz.smartautoclicker.core.domain.model.endcondition.EndCondition
+import com.buzbuz.smartautoclicker.core.ui.bindings.setError
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.viewModels
 import com.buzbuz.smartautoclicker.feature.scenario.config.R
@@ -44,7 +45,6 @@ import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.ContentSc
 import com.buzbuz.smartautoclicker.feature.scenario.config.ui.endcondition.EndConditionConfigDialog
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_DISABLED_ITEM
 import com.buzbuz.smartautoclicker.feature.scenario.config.utils.ALPHA_ENABLED_ITEM
-import com.buzbuz.smartautoclicker.feature.scenario.config.utils.setError
 
 import com.google.android.material.card.MaterialCardView
 

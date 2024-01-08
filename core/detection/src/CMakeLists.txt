@@ -30,6 +30,9 @@ add_library( # Sets the name of the library.
         SHARED
 
         # Provides a relative path to your source file(s).
+        main/cpp/types/detectionResult.hpp
+        main/cpp/utils/androidBitmap.hpp
+        main/cpp/utils/roi.hpp
         main/cpp/smartautoclicker.cpp
         main/cpp/detector.cpp
         main/cpp/detector.hpp)

@@ -19,6 +19,7 @@ package com.buzbuz.smartautoclicker.feature.tutorial.data.game.rules
 import android.graphics.PointF
 import android.graphics.Rect
 import android.util.Log
+import androidx.annotation.CallSuper
 
 import com.buzbuz.smartautoclicker.feature.tutorial.data.game.TutorialGameRules
 import com.buzbuz.smartautoclicker.feature.tutorial.data.game.TutorialGameStateData
@@ -75,31 +76,20 @@ internal abstract class BaseGameRules(override val highScore: Int) : TutorialGam
             }
 
             // Game is over
-            Log.d(TAG, "Game over")
-
             isStarted.value = false
             _targets.value = emptyMap()
             isWon.value = score.value > highScore
+
+            Log.d(TAG, "Game over, victory=${isWon.value}")
             onResult(isWon.value == true)
         }
     }
 
     final override fun stop() {
-        if (!isStarted.value) return
-
         Log.d(TAG, "Stop game")
 
         gameJob?.cancel()
         gameJob = null
-
-        isStarted.value = false
-        timer.value = 0
-        isWon.value = null
-        _targets.value = emptyMap()
-    }
-
-    override fun reset() {
-        Log.d(TAG, "Reset game")
 
         isStarted.value = false
         timer.value = 0
@@ -108,9 +98,16 @@ internal abstract class BaseGameRules(override val highScore: Int) : TutorialGam
         _targets.value = emptyMap()
     }
 
+    final override fun onTargetHit(type: TutorialGameTargetType) {
+        if (isStarted.value) onValidTargetHit(type)
+        else _targets.value = emptyMap()
+    }
+
     abstract fun onStart(area: Rect, targetSize: Int)
+    abstract fun onValidTargetHit(type: TutorialGameTargetType)
     open fun onTimerTick(timeLeft: Int) { /* Default impl does nothing. */ }
 }
 
+internal const val TARGET_MARGIN = 10
 private const val TAG = "TutorialGameRules"
-private const val GAME_DURATION_SECONDS = 5
+private const val GAME_DURATION_SECONDS = 10

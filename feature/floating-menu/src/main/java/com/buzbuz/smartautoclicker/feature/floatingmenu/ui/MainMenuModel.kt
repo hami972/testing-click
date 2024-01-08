@@ -104,15 +104,28 @@ class MainMenuModel(application: Application) : AndroidViewModel(application) {
             canStartDetection && isSynchronized
         }
 
+    /** Tells if the . */
+    val nativeLibError: Flow<Boolean> = detectionRepository.detectionState
+        .map { it == DetectionState.ERROR_NO_NATIVE_LIB }
+        .distinctUntilChanged()
+
     /** Start/Stop the detection. */
     fun toggleDetection(context: Context, onStoppedByLimitation: () -> Unit) {
+        when (detectionState.value) {
+            UiState.Detecting -> stopDetection()
+            UiState.Idle -> startDetection(context, onStoppedByLimitation)
+        }
+    }
+
+    /** Stop the detection. Returns true if it was started, false if not. */
+    fun stopDetection(): Boolean {
+        if (detectionState.value !is UiState.Detecting) return false
+
         autoStopJob?.cancel()
         autoStopJob = null
 
-        when (detectionState.value) {
-            UiState.Detecting -> detectionRepository.stopDetection()
-            UiState.Idle -> startDetection(context, onStoppedByLimitation)
-        }
+        detectionRepository.stopDetection()
+        return true
     }
 
     private fun startDetection(context: Context, onStoppedByLimitation: () -> Unit) {
@@ -183,6 +196,12 @@ class MainMenuModel(application: Application) : AndroidViewModel(application) {
     fun onFirstTimeTutorialDialogShown(): Unit =
         tutorialRepository.setIsTutorialFirstTimePopupShown()
 
+    fun shouldShowStopVolumeDownTutorialDialog(): Boolean =
+        !tutorialRepository.isTutorialStopVolumeDownPopupShown()
+
+    fun onStopVolumeDownTutorialDialogShown(): Unit =
+        tutorialRepository.setIsTutorialStopVolumeDownPopupShown()
+
     override fun onCleared() {
         super.onCleared()
         repository.cleanCache()
@@ -190,6 +209,6 @@ class MainMenuModel(application: Application) : AndroidViewModel(application) {
 }
 
 sealed class UiState {
-    object Detecting: UiState()
-    object Idle: UiState()
+    data object Detecting: UiState()
+    data object Idle: UiState()
 }

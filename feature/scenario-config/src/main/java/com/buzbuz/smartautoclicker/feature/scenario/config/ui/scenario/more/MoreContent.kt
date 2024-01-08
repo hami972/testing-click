@@ -16,8 +16,11 @@
  */
 package com.buzbuz.smartautoclicker.feature.scenario.config.ui.scenario.more
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 
 import androidx.lifecycle.Lifecycle
@@ -27,8 +30,10 @@ import androidx.lifecycle.repeatOnLifecycle
 
 import com.buzbuz.smartautoclicker.core.ui.bindings.DialogNavigationButton
 import com.buzbuz.smartautoclicker.core.ui.overlays.dialog.NavBarDialogContent
+import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
+import com.buzbuz.smartautoclicker.feature.scenario.config.R
 import com.buzbuz.smartautoclicker.feature.scenario.config.databinding.ContentMoreBinding
-import com.buzbuz.smartautoclicker.feature.tutorial.ui.TutorialActivity
+import com.buzbuz.smartautoclicker.feature.scenario.debugging.ui.report.DebugReportDialog
 
 import kotlinx.coroutines.launch
 
@@ -54,6 +59,7 @@ class MoreContent(appContext: Context) : NavBarDialogContent(appContext) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.isDebugViewEnabled.collect(::updateDebugView) }
                 launch { viewModel.isDebugReportEnabled.collect(::updateDebugReport) }
+                launch { viewModel.debugReportAvailability.collect(::updateDebugReportAvailability) }
             }
         }
     }
@@ -65,8 +71,14 @@ class MoreContent(appContext: Context) : NavBarDialogContent(appContext) {
     }
 
     private fun onTutorialClicked() {
-        dialogController.back()
-        context.startActivity(TutorialActivity.getStartIntent(context))
+        debounceUserInteraction {
+            dialogController.back()
+
+            val intent = Intent()
+                .setComponent(ComponentName(context.packageName, "com.buzbuz.smartautoclicker.feature.tutorial.ui.TutorialActivity"))
+                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
     }
 
     private fun updateDebugView(isEnabled: Boolean) {
@@ -75,5 +87,24 @@ class MoreContent(appContext: Context) : NavBarDialogContent(appContext) {
 
     private fun updateDebugReport(isEnabled: Boolean) {
         viewBinding.debugReport.isChecked = isEnabled
+    }
+
+    private fun updateDebugReportAvailability(isAvailable: Boolean) {
+        if (isAvailable) {
+            viewBinding.debugReportStateText.setText(R.string.item_title_debug_report_available)
+            viewBinding.debugReportChevron.visibility = View.VISIBLE
+            viewBinding.debugReportOpenView.setOnClickListener { debounceUserInteraction { showDebugReport() } }
+        } else {
+            viewBinding.debugReportStateText.setText(R.string.item_title_debug_report_not_available)
+            viewBinding.debugReportChevron.visibility = View.GONE
+            viewBinding.debugReportOpenView.setOnClickListener(null)
+        }
+    }
+
+    private fun showDebugReport() {
+        OverlayManager.getInstance(context).navigateTo(
+            context = context,
+            newOverlay = DebugReportDialog(),
+        )
     }
 }

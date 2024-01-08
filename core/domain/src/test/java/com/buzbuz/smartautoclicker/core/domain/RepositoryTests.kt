@@ -28,7 +28,7 @@ import com.buzbuz.smartautoclicker.core.database.dao.EventDao
 import com.buzbuz.smartautoclicker.core.database.dao.ScenarioDao
 import com.buzbuz.smartautoclicker.core.database.entity.CompleteEventEntity
 import com.buzbuz.smartautoclicker.core.database.entity.ScenarioWithEndConditions
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 import com.buzbuz.smartautoclicker.core.domain.utils.TestsData
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -181,7 +181,7 @@ class RepositoryTests {
                     conditions = mutableListOf(TestsData.getNewCondition(eventId = TestsData.EVENT_ID))
                 ),
             ),
-            repository.getCompleteEventListFlow(TestsData.SCENARIO_ID).first(),
+            repository.getEventsFlow(TestsData.SCENARIO_ID).first(),
         )
     }
 

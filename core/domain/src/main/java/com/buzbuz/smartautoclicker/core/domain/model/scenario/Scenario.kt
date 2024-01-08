@@ -18,7 +18,7 @@ package com.buzbuz.smartautoclicker.core.domain.model.scenario
 
 import com.buzbuz.smartautoclicker.core.database.entity.EndConditionEntity
 import com.buzbuz.smartautoclicker.core.domain.model.ConditionOperator
-import com.buzbuz.smartautoclicker.core.domain.model.Identifier
+import com.buzbuz.smartautoclicker.core.base.identifier.Identifier
 
 /**
  * Scenario of events.
@@ -40,8 +40,3 @@ data class Scenario(
     val randomize: Boolean = false,
     val eventCount: Int = 0,
 )
-
-/** The maximum detection quality for the algorithm. */
-const val DETECTION_QUALITY_MAX = 1200
-/** The minimum detection quality for the algorithm. */
-const val DETECTION_QUALITY_MIN = 400

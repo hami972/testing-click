@@ -18,50 +18,63 @@ package com.buzbuz.smartautoclicker.feature.scenario.config.data.base
 
 import androidx.annotation.CallSuper
 
-import com.buzbuz.smartautoclicker.feature.scenario.config.domain.EditedElementState
+import com.buzbuz.smartautoclicker.feature.scenario.config.domain.model.EditedElementState
+import com.buzbuz.smartautoclicker.feature.scenario.config.domain.model.EditedListState
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 
-abstract class ListEditor<Item>(
+abstract class ListEditor<Item, Parent>(
     private val onListUpdated: ((List<Item>) -> Unit)? = null,
     canBeEmpty: Boolean = false,
+    parentItem: StateFlow<Parent?>,
 ) {
 
     private val referenceList: MutableStateFlow<List<Item>?> = MutableStateFlow(null)
-    private val _editedList: MutableStateFlow<List<Item>?> = MutableStateFlow((null))
+    private val _editedList: MutableStateFlow<List<Item>?> = MutableStateFlow(null)
     val editedList: StateFlow<List<Item>?> = _editedList
-    val listState: Flow<EditedElementState<List<Item>>> = combine(referenceList, _editedList) { ref, edit ->
+    val listState: Flow<EditedListState<Item>> = combine(referenceList, _editedList, parentItem) { ref, edit, parent ->
         val hasChanged =
             if (ref == null || edit == null) false
             else ref != edit
 
-        val canBeSaved = when {
-            edit == null -> false
-            edit.isEmpty() -> canBeEmpty
-            else -> edit.find { !isItemComplete(it) } == null
+        var canBeSaved = true
+        val itemValidity: MutableList<Boolean> = ArrayList(edit?.size ?: 0)
+        when {
+            edit == null -> canBeSaved = false
+            edit.isEmpty() -> canBeSaved = canBeEmpty
+            else -> {
+                edit.forEach { item ->
+                    if (!isItemComplete(item, parent)) {
+                        canBeSaved = false
+                        itemValidity.add(false)
+                    } else {
+                        itemValidity.add(true)
+                    }
+                }
+            }
         }
 
-        EditedElementState(edit, hasChanged, canBeSaved)
+        EditedListState(edit, itemValidity, hasChanged, canBeSaved)
     }
 
     private val referenceEditedItem: MutableStateFlow<Item?> = MutableStateFlow(null)
-    private val _editedItem: MutableStateFlow<Item?> = MutableStateFlow((null))
+    private val _editedItem: MutableStateFlow<Item?> = MutableStateFlow(null)
     val editedItem: StateFlow<Item?> = _editedItem
-    val editedItemState: Flow<EditedElementState<Item>> = combine(referenceEditedItem, _editedItem) { ref, edit ->
+    val editedItemState: Flow<EditedElementState<Item>> = combine(referenceEditedItem, _editedItem, parentItem) { ref, edit, parent ->
         val hasChanged =
             if (ref == null || edit == null) false
             else ref != edit
 
-        val canBeSaved = edit?.let { isItemComplete(it) } ?: false
+        val canBeSaved = edit?.let { isItemComplete(it, parent) } ?: false
 
         EditedElementState(edit, hasChanged, canBeSaved)
     }
 
     abstract fun areItemsTheSame(a: Item, b: Item): Boolean
-    abstract fun isItemComplete(item: Item): Boolean
+    abstract fun isItemComplete(item: Item, parent: Parent?): Boolean
 
     fun startEdition(referenceItems: List<Item>) {
         referenceList.value = referenceItems
@@ -83,6 +96,7 @@ abstract class ListEditor<Item>(
     }
 
     fun stopEdition() {
+        stopItemEdition()
         referenceList.value = null
         _editedList.value = null
     }
@@ -108,9 +122,9 @@ abstract class ListEditor<Item>(
     /** Delete a item from the scenario. */
     @CallSuper
     open fun deleteEditedItem() {
-        val newItem = _editedItem.value ?: return
+        val removedItem = _editedItem.value ?: return
         val newItems = _editedList.value?.toMutableList() ?: return
-        val index = newItems.indexOfItem(newItem)
+        val index = newItems.indexOfItem(removedItem)
 
         if (index == -1) {
             stopItemEdition()

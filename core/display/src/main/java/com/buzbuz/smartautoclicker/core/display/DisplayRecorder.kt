@@ -53,7 +53,7 @@ import kotlinx.coroutines.sync.withLock
  * [stopProjection] in order to release all resources associated with this object.
  */
 @MainThread
-class ScreenRecorder internal constructor() {
+class DisplayRecorder internal constructor() {
 
     companion object {
         /** Tag for logs. */
@@ -63,17 +63,17 @@ class ScreenRecorder internal constructor() {
 
         /** Singleton preventing multiple instances of the ScreenRecorder at the same time. */
         @Volatile
-        private var INSTANCE: ScreenRecorder? = null
+        private var INSTANCE: DisplayRecorder? = null
 
         /**
          * Get the engine singleton, or instantiates it if it wasn't yet.
          *
          * @return the engine singleton.
          */
-        fun getInstance(): ScreenRecorder {
+        fun getInstance(): DisplayRecorder {
             return INSTANCE ?: synchronized(this) {
                 Log.i(TAG, "Instantiates new ScreenRecorder")
-                val instance = ScreenRecorder()
+                val instance = DisplayRecorder()
                 INSTANCE = instance
                 instance
             }
@@ -93,8 +93,10 @@ class ScreenRecorder internal constructor() {
     /** Listener to notify upon projection ends. */
     private var stopListener: (() -> Unit)? = null
     /** Allow access to [Image] rendered into the surface view of the [VirtualDisplay] */
-    var imageReader: ImageReader? = null
-        private set
+    private var imageReader: ImageReader? = null
+
+    /** Cache for the current frame. Interpreted from an [Image]. */
+    private var latestAcquiredFrameBitmap: Bitmap? = null
 
     /**
      * Start the media projection.
@@ -140,7 +142,7 @@ class ScreenRecorder internal constructor() {
      * @param context the Android context.
      * @param displaySize the size of the display, in pixels.
      */
-    suspend fun startScreenRecord(context: Context, displaySize: Point) = mutex.withLock {
+    suspend fun startScreenRecord(context: Context, displaySize: Point): Unit = mutex.withLock {
         if (projection == null || imageReader != null) {
             Log.w(TAG, "Attempting to start screen record while already started.")
             return
@@ -150,22 +152,32 @@ class ScreenRecorder internal constructor() {
 
         @SuppressLint("WrongConstant")
         imageReader = ImageReader.newInstance(displaySize.x, displaySize.y, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = projection!!.createVirtualDisplay(
-            VIRTUAL_DISPLAY_NAME, displaySize.x, displaySize.y, context.resources.configuration.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader!!.surface, null,
-            null)
+        try {
+            virtualDisplay = projection!!.createVirtualDisplay(
+                VIRTUAL_DISPLAY_NAME, displaySize.x, displaySize.y, context.resources.configuration.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader!!.surface, null,
+                null)
+        } catch (sEx: SecurityException) {
+            Log.w(TAG, "Screencast permission is no longer valid, stopping Smart AutoClicker...")
+            stopListener?.invoke()
+        }
     }
 
     /** @return the last image of the screen, or null if they have been processed. */
-    suspend fun acquireLatestImage(): Image? = mutex.withLock { imageReader?.acquireLatestImage() }
+    suspend fun acquireLatestBitmap(): Bitmap? = mutex.withLock {
+        imageReader?.acquireLatestImage()?.use { image ->
+            latestAcquiredFrameBitmap = image.toBitmap(latestAcquiredFrameBitmap)
+            latestAcquiredFrameBitmap
+        }
+    }
 
     suspend fun takeScreenshot(area: Rect, completion: suspend (Bitmap) -> Unit) {
-        var image: Image?
+        var screenFrame: Bitmap?
         do {
-            image = acquireLatestImage()
-            image?.use {
+            screenFrame = acquireLatestBitmap()
+            screenFrame?.let {
                 val bitmap = Bitmap.createBitmap(
-                    it.toBitmap(),
+                    it,
                     area.left,
                     area.top,
                     area.width(),
@@ -174,7 +186,7 @@ class ScreenRecorder internal constructor() {
 
                 completion(bitmap)
             }
-        } while (image == null)
+        } while (screenFrame == null)
     }
 
     /**
@@ -233,7 +245,7 @@ class ScreenRecorder internal constructor() {
  *                     created.
  * @return the bitmap corresponding to the image. If [resultBitmap] was provided, it will be the same object.
  */
-fun Image.toBitmap(resultBitmap: Bitmap? = null): Bitmap {
+private fun Image.toBitmap(resultBitmap: Bitmap? = null): Bitmap {
     var bitmap = resultBitmap
     val imageWidth = width + (planes[0].rowStride - planes[0].pixelStride * width) / planes[0].pixelStride
 
@@ -247,6 +259,6 @@ fun Image.toBitmap(resultBitmap: Bitmap? = null): Bitmap {
         }
     }
 
-    bitmap?.copyPixelsFromBuffer(planes[0].buffer)
-    return bitmap!!
+    bitmap.copyPixelsFromBuffer(planes[0].buffer)
+    return bitmap
 }

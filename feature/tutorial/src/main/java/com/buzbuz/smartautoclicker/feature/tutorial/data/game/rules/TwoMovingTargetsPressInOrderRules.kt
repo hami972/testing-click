@@ -20,7 +20,7 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
 
-import com.buzbuz.smartautoclicker.core.extensions.getNextPositionIn
+import com.buzbuz.smartautoclicker.core.base.extensions.getNextPositionIn
 import com.buzbuz.smartautoclicker.feature.tutorial.domain.model.game.TutorialGameTargetType
 
 import kotlin.random.Random
@@ -34,17 +34,17 @@ internal class TwoMovingTargetsPressInOrderRules(highScore: Int) : BaseGameRules
 
     override fun onStart(area: Rect, targetSize: Int) {
         targetsArea = RectF(
-            area.left.toFloat(),
-            area.top.toFloat(),
-            area.right.toFloat() - targetSize,
-            area.bottom.toFloat() - targetSize,
+            area.left.toFloat() + TARGET_MARGIN,
+            area.top.toFloat() + TARGET_MARGIN,
+            area.right.toFloat() - targetSize - TARGET_MARGIN,
+            area.bottom.toFloat() - targetSize - TARGET_MARGIN,
         )
         targetHalfSize = targetSize / 2f
 
         showNewTargets()
     }
 
-    override fun onTargetHit(type: TutorialGameTargetType) {
+    override fun onValidTargetHit(type: TutorialGameTargetType) {
         val targets = _targets.value
         when {
             type == TutorialGameTargetType.RED && targets.containsKey(TutorialGameTargetType.RED) && targets.containsKey(

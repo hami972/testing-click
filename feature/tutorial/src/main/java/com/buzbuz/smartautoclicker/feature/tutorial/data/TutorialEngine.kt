@@ -20,82 +20,32 @@ import android.content.Context
 import android.graphics.Rect
 import android.util.Log
 
+import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewsManager
 import com.buzbuz.smartautoclicker.core.ui.overlays.Overlay
 import com.buzbuz.smartautoclicker.core.ui.overlays.manager.OverlayManager
-import com.buzbuz.smartautoclicker.feature.tutorial.data.game.TutorialGameStateData
-import com.buzbuz.smartautoclicker.core.ui.monitoring.MonitoredViewsManager
 import com.buzbuz.smartautoclicker.feature.tutorial.domain.model.game.TutorialGameTargetType
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.shareIn
 
-@OptIn(ExperimentalCoroutinesApi::class)
-internal class TutorialEngine(context: Context) {
+internal class TutorialEngine(context: Context, private val coroutineScope: CoroutineScope) {
 
-    private val coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val overlayManager: OverlayManager = OverlayManager.getInstance(context)
     private val monitoredViewsManager: MonitoredViewsManager = MonitoredViewsManager.getInstance()
 
     private val _tutorial: MutableStateFlow<TutorialData?> = MutableStateFlow(null)
     val tutorial: StateFlow<TutorialData?> = _tutorial
 
-    private val stepIndex: MutableStateFlow<Int?> = MutableStateFlow(null)
-    private val stepStartBackStackTop: MutableStateFlow<Overlay?> = MutableStateFlow(null)
-    private val stepGameIsWon: MutableStateFlow<Boolean?> = MutableStateFlow(null)
-    private val isMonitoredViewClicked: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    private val stepState: MutableStateFlow<TutorialStepState?> = MutableStateFlow(null)
 
-    val gameState: Flow<TutorialGameStateData?> = _tutorial
-        .flatMapLatest { tutorial ->
-            tutorial?.game?.gameState ?: flowOf(null)
-        }
-
-    val currentStep: Flow<TutorialStepData?> =
-        combine(
-            _tutorial,
-            stepIndex,
-            stepGameIsWon,
-            overlayManager.backStackTop,
-            isMonitoredViewClicked,
-        ) { tuto, index, isWon, top, isTargetClicked ->
-            if (tuto == null || index == null) return@combine null
-            if (index < 0 || index >= tuto.steps.size) return@combine null
-
-            val step = tuto.steps[index]
-            Log.d(TAG, "New tutorial step $index - $step; backStackTop=$top")
-
-            when (step.stepStartCondition) {
-                StepStartCondition.Immediate ->
-                    step
-
-                StepStartCondition.NextOverlay ->
-                    if (stepStartBackStackTop.value != top) step
-                    else null
-
-                StepStartCondition.GameWon ->
-                    if (isWon == true) step
-                    else null
-
-                StepStartCondition.GameLost -> {
-                    if (isWon == false) step
-                    else null
-                }
-
-                is StepStartCondition.MonitoredViewClicked -> {
-                    if (isTargetClicked) step
-                    else null
-                }
-            }
-        }.shareIn(coroutineScope, SharingStarted.WhileSubscribed(3_000), 1)
+    val currentStep: Flow<TutorialStepData?> = _tutorial
+        .flowOnCurrentAndStartedStep()
+        .shareIn(coroutineScope, SharingStarted.WhileSubscribed(3_000), 1)
 
     fun isStarted(): Boolean = _tutorial.value != null
 
@@ -104,56 +54,62 @@ internal class TutorialEngine(context: Context) {
 
         // Keep track of current top of back stack value and monitored views
         setTutorialExpectedViews(newTutorial)
-        stepStartBackStackTop.value = overlayManager.getBackStackTop()
 
-        stepIndex.value = 0
         _tutorial.value = newTutorial
+        setStepIndex(0)
     }
 
-    fun nextStep(): Boolean {
-        val step = getCurrentStep() ?: return false
-        val index = stepIndex.value ?: return false
+    fun nextStep() {
+        val step = getCurrentStep() ?: return
+        val index = stepState.value?.index ?: return
 
-        // Keep track of current top of back stack value
-        stepStartBackStackTop.value = overlayManager.getBackStackTop()
-        stepGameIsWon.value = null
+        val newIndex = index + 1
+        setStepIndex(newIndex)
 
-        isMonitoredViewClicked.value = false
+        // If step end condition is a click on the monitored view, execute it now
+        if (step is TutorialStepData.TutorialOverlay && step.stepEndCondition is StepEndCondition.MonitoredViewClicked) {
+            monitoredViewsManager.performClick(step.stepEndCondition.type)
+        }
+    }
+
+    fun lastStep() {
+        val lastStepIndex = _tutorial.value?.steps?.lastIndex ?: return
+        Log.d(TAG, "Go to last step")
+        setStepIndex(lastStepIndex)
+    }
+
+    private fun setStepIndex(newIndex: Int) {
+        Log.d(TAG, "Set step index to $newIndex")
+
+        // Get step state initial values
+        val isMonitoredViewClicked = false
+        val isGameWon = null
+        val stackTop = overlayManager.getBackStackTop()
+
+        // If the new step needs to monitor a view, do it here
         getNextStep()?.let { nextStep ->
-            if (nextStep.stepStartCondition is StepStartCondition.MonitoredViewClicked) {
-                monitoredViewsManager.monitorNextClick(nextStep.stepStartCondition.type) {
-                    isMonitoredViewClicked.value = true
+            val startCondition = nextStep.stepStartCondition
+            if (nextStep is TutorialStepData.TutorialOverlay && startCondition is StepStartCondition.MonitoredViewClicked) {
+                monitoredViewsManager.monitorNextClick(startCondition.type) {
+                    stepState.value = stepState.value?.copy(isMonitoredViewClicked = true)
                 }
             }
         }
 
-        Log.d(TAG, "End current step: $index - $step; current stack top: ${stepStartBackStackTop.value}")
-
-        val newIndex = index + 1
-        stepIndex.value = newIndex
-
-        val stepEndCondition = step.stepEndCondition
-        if (stepEndCondition is StepEndCondition.MonitoredViewClicked) {
-            monitoredViewsManager.performClick(stepEndCondition.type)
-        }
-
-        val lastStepIndex = _tutorial.value?.steps?.lastIndex ?: return false
-        return newIndex > lastStepIndex
+        // Update step state
+        stepState.value = TutorialStepState(
+            index = newIndex,
+            isMonitoredViewClicked = isMonitoredViewClicked,
+            isGameWon = isGameWon,
+            stepStartStackTop = stackTop,
+        )
     }
 
-    fun skipAllSteps() {
-        Log.d(TAG, "Skip all steps")
-
-        stepIndex.value = null
-        stepStartBackStackTop.value = null
-        stepGameIsWon.value = null
-        isMonitoredViewClicked.value = false
-    }
-
-    fun startGame(scope: CoroutineScope, area: Rect, targetSize: Int) {
+    fun startGame(area: Rect, targetSize: Int) {
         Log.d(TAG, "Start game on area $area with target size $targetSize")
-        _tutorial.value?.game?.start(scope, area, targetSize) { isWon ->
-            stepGameIsWon.value = isWon
+
+        _tutorial.value?.game?.start(coroutineScope, area, targetSize) { isWon ->
+            stepState.value = stepState.value?.copy(isGameWon = isWon)
         }
     }
 
@@ -162,27 +118,22 @@ internal class TutorialEngine(context: Context) {
         _tutorial.value?.game?.onTargetHit(target)
     }
 
-    fun stopGame() {
-        Log.d(TAG, "Stop game")
-        _tutorial.value?.game?.stop()
-    }
-
     fun stopTutorial() {
         Log.d(TAG, "Stop tutorial")
 
         _tutorial.value?.game?.stop()
         monitoredViewsManager.clearExpectedViews()
-        stepIndex.value = null
+        stepState.value = null
         _tutorial.value = null
     }
 
     private fun getCurrentStep(): TutorialStepData? {
-        val index = stepIndex.value ?: return null
+        val index = stepState.value?.index ?: return null
         return _tutorial.value?.steps?.get(index)
     }
 
     private fun getNextStep(): TutorialStepData? {
-        val index = stepIndex.value ?: return null
+        val index = stepState.value?.index ?: return null
         val steps = _tutorial.value?.steps ?: return null
         if (index + 1 > steps.lastIndex) return null
 
@@ -193,12 +144,45 @@ internal class TutorialEngine(context: Context) {
         monitoredViewsManager.setExpectedViews(
             buildSet {
                 tutorial.steps.forEach { step ->
-                    if (step.stepEndCondition is StepEndCondition.MonitoredViewClicked)
+                    if (step is TutorialStepData.TutorialOverlay && step.stepEndCondition is StepEndCondition.MonitoredViewClicked)
                         add(step.stepEndCondition.type)
                 }
             }
         )
     }
+
+    private fun Flow<TutorialData?>.flowOnCurrentAndStartedStep(): Flow<TutorialStepData?> =
+        combine(this, stepState, overlayManager.backStackTop) { tuto, state, stackTop ->
+            tuto ?: return@combine null
+
+            val index = state?.index
+            if (index == null || index < 0 || index >= tuto.steps.size) return@combine null
+
+            val step = tuto.steps[index]
+            if (step.stepStartCondition.isFulfilled(state, stackTop)) {
+                Log.d(TAG, "Current step is now started: $step")
+                step
+            } else {
+                Log.d(TAG, "Current step is waiting for start condition: $step")
+                null
+            }
+        }
+
+    private fun StepStartCondition.isFulfilled(stepState: TutorialStepState, stackTop: Overlay?) : Boolean =
+        when (this) {
+            StepStartCondition.Immediate -> true
+            StepStartCondition.NextOverlay -> stepState.stepStartStackTop != stackTop
+            StepStartCondition.GameWon -> stepState.isGameWon == true
+            StepStartCondition.GameLost -> stepState.isGameWon == false
+            is StepStartCondition.MonitoredViewClicked -> stepState.isMonitoredViewClicked
+        }
 }
+
+private data class TutorialStepState(
+    val index: Int,
+    val isMonitoredViewClicked: Boolean,
+    val isGameWon: Boolean?,
+    val stepStartStackTop: Overlay?,
+)
 
 private const val TAG = "TutorialEngine"
